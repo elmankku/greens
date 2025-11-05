@@ -1,0 +1,23 @@
+[package]
+name = "greens-sel4"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+vmm-sys-util = "0.12.0"
+zerocopy = { version = "0.7", features = ["derive"] }
+greens-core = { path = "../greens-core" }
+greens-sys-linux = { path = "../greens-sys-linux" }
+libc = "0.2"
+thiserror = "1.0"
+vm-memory = { version = "0.15.0", features = ["backend-mmap"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(test)'] }
+
+[build-dependencies]
+bindgen = { version = "0.69", default-features = true, features = [
+  "experimental",
+] }
+cc = "1.0"

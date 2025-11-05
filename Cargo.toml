@@ -1,0 +1,14 @@
+[workspace]
+
+resolver = "2"
+
+members = [
+  "crates/greens-sel4",
+  "crates/greens-core",
+  "crates/greens-pci",
+  "crates/greens-sel4-pci-vhost-net",
+  "crates/greens-pci-virtio",
+  "crates/greens-sys-linux",
+]
+
+default-members = ["crates/greens-core", "crates/greens-sel4-pci-vhost-net"]

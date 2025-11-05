@@ -1,0 +1,12 @@
+[package]
+name = "greens-pci"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[features]
+std = []
+pcie = []
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(test)'] }

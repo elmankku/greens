@@ -1,0 +1,11 @@
+[package]
+name = "greens-sys-linux"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+libc = "0.2"
+thiserror = "1.0"
+vm-device = "0.1"
+vmm-sys-util = "0.12.0"
