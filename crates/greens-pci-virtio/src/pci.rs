@@ -5,8 +5,8 @@ use greens_pci::bar_region::{PciBarRegionHandler, PciBarRegionInfo, PciBarRegion
 use greens_pci::config_handler::PciConfigurationSpaceIoHandler;
 use greens_pci::configuration_space::PciConfigurationSpace;
 use greens_pci::function::{
-    PciFunctionConfig, PciFunctionConfigAccessor, PciFunctionWithInterrupts, PciHandlerResult,
-    PciInterruptConfigEvent, PciInterruptConfigHandler,
+    PciConfigurationUpdate, PciFunctionConfig, PciFunctionConfigAccessor,
+    PciFunctionWithInterrupts, PciHandlerResult, PciInterruptConfigHandler,
 };
 use greens_pci::interrupt::PciInterruptType::{Intx, MsiX, NoInterrupt};
 use greens_pci::interrupt::{handle_intx, handle_msi, PciInterruptSignaler};
@@ -140,8 +140,8 @@ where
     C: PciInterruptController,
     D: VirtioPciDevice<E = greens_pci::Error, Q = Queue>,
 {
-    fn on_interrupt_config_write(&mut self, event: PciInterruptConfigEvent) {
-        if let PciInterruptConfigEvent::MsiMessageUpdate(vector, msg) = event {
+    fn on_interrupt_config_update(&mut self, event: PciConfigurationUpdate) {
+        if let PciConfigurationUpdate::MsiXMessage(vector, msg) = event {
             self.device.set_msi_message(vector as u16, msg)
         }
     }
@@ -297,7 +297,7 @@ where
         &mut self,
         offset: usize,
         size: usize,
-    ) -> Result<PciHandlerResult<PciInterruptConfigEvent>> {
+    ) -> Result<PciHandlerResult<Option<PciConfigurationUpdate>>> {
         // TODO: process write to handle interrupt source changes:
         //      - INTx is asserted, MSI(-X) enabled -> deassert INTx (call intx.disable())
         //      - MSI enabled and MSI-X gets enabled -> must not evaluate pending interrupts.
@@ -324,7 +324,7 @@ where
         bar: PciBarIndex,
         offset: u64,
         data: &mut [u8],
-    ) -> Result<PciHandlerResult<PciInterruptConfigEvent>> {
+    ) -> Result<PciHandlerResult<Option<PciConfigurationUpdate>>> {
         let context =
             &mut MsiXBarHandlerContext::new(&mut self.config, &mut self.interrupt_controller);
 
@@ -336,7 +336,7 @@ where
         bar: PciBarIndex,
         offset: u64,
         data: &[u8],
-    ) -> Result<PciHandlerResult<PciInterruptConfigEvent>> {
+    ) -> Result<PciHandlerResult<Option<PciConfigurationUpdate>>> {
         let context =
             &mut MsiXBarHandlerContext::new(&mut self.config, &mut self.interrupt_controller);
 

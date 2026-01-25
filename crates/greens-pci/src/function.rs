@@ -76,6 +76,7 @@ pub trait PciFunction {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum PciHandlerResult<T> {
     Handled(T),
     Unhandled,
@@ -87,9 +88,10 @@ impl<T> PciHandlerResult<T> {
     }
 }
 
-pub enum PciInterruptConfigEvent {
-    MsiMessageUpdate(usize, PciMsiMessage),
-    Other,
+#[derive(Debug, PartialEq)]
+pub enum PciConfigurationUpdate {
+    MsiMessage(PciMsiMessage),
+    MsiXMessage(usize, PciMsiMessage),
 }
 
 pub trait PciInterruptConfigHandler: PciInterruptSignaler + PciFunctionConfigAccessor {
@@ -105,8 +107,10 @@ pub trait PciInterruptConfigHandler: PciInterruptSignaler + PciFunctionConfigAcc
 
     fn write_config(&mut self, offset: usize, data: &[u8]) -> Result<()> {
         self.device_write_config(offset, data)?;
-        if let PciHandlerResult::Handled(r) = self.postprocess_write_config(offset, data.len())? {
-            self.on_interrupt_config_write(r);
+        if let PciHandlerResult::Handled(Some(r)) =
+            self.postprocess_write_config(offset, data.len())?
+        {
+            self.on_interrupt_config_update(r);
         }
         Ok(())
     }
@@ -120,15 +124,15 @@ pub trait PciInterruptConfigHandler: PciInterruptSignaler + PciFunctionConfigAcc
     }
 
     fn write_bar(&mut self, bar: PciBarIndex, offset: u64, data: &[u8]) -> Result<()> {
-        if let PciHandlerResult::Handled(r) = self.handle_write_bar(bar, offset, data)? {
-            self.on_interrupt_config_write(r);
+        if let PciHandlerResult::Handled(Some(r)) = self.handle_write_bar(bar, offset, data)? {
+            self.on_interrupt_config_update(r);
             return Ok(());
         }
 
         self.device_write_bar(bar, offset, data)
     }
 
-    fn on_interrupt_config_write(&mut self, event: PciInterruptConfigEvent) {
+    fn on_interrupt_config_update(&mut self, event: PciConfigurationUpdate) {
         let _ = event;
     }
 }

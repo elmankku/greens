@@ -9,7 +9,7 @@ use crate::bar_region::{PciBarRegionInfo, PciBarRegionSet, PciBarRegionSetHandle
 use crate::capability::{PciCapOffset, PciCapability, PciCapabilityId};
 use crate::config_handler::PciConfigurationSpaceIoHandler;
 use crate::configuration_space::{allow_bus_master, PciConfigurationSpace};
-use crate::function::{PciHandlerResult, PciInterruptConfigEvent};
+use crate::function::{PciConfigurationUpdate, PciHandlerResult};
 use crate::msi::{PciMsiGenerationResult, PciMsiMessageSource, PciMsiVector};
 use crate::utils::range_overlaps;
 use crate::utils::register_block::{
@@ -94,7 +94,7 @@ impl PciMsiXCapability {
         let msix_offset = msix_info.offset;
         let pba_offset = pba_info.offset;
 
-        // Must be QWORD aligned and must fit to 32bits
+        // Must be QWORD aligned and must fit to 32bits.
         let offset_mask: u64 = OFFSET_MASK.into();
         if msix_offset | offset_mask != offset_mask {
             return Err(Error::InvalidMsiXTableOffset {
@@ -106,7 +106,7 @@ impl PciMsiXCapability {
             return Err(Error::InvalidBarIndex { index: msix_bar });
         }
 
-        // Must be QWORD aligned and must fit to 32bits
+        // Must be QWORD aligned and must fit to 32bits.
         if pba_offset | offset_mask != offset_mask {
             return Err(Error::InvalidMsiXTableOffset {
                 offset: msix_offset,
@@ -118,12 +118,12 @@ impl PciMsiXCapability {
         }
 
         let num_vectors = msix_table.iter().count();
-        // Must not be 0 and must not exceed max size
+        // Must not be 0 and must not exceed max size.
         if num_vectors == 0 || num_vectors - 1 > MESSAGE_CONTROL_TABLE_SIZE.into() {
             return Err(Error::InvalidMsiXTableSize { size: num_vectors });
         }
 
-        // Must fit to region
+        // Must fit to region.
         if msix_table.raw_bytes().len() as u64 > msix_info.length {
             return Err(Error::InvalidMsiXBarSize {
                 size: msix_info.length,
@@ -136,7 +136,7 @@ impl PciMsiXCapability {
             });
         }
 
-        // The spec: "MSI-X Table Size N, which is encoded as N-1"
+        // The spec: "MSI-X Table Size N, which is encoded as N-1".
         let num_vectors = (num_vectors - 1) as u16;
 
         let msix_offset = msix_offset as u32 | msix_bar as u32;
@@ -215,15 +215,18 @@ pub struct PbaEntry {
 pub trait MsiXTableAccessor {
     type Entry;
 
-    // Table size in bytes
+    // Table size in bytes.
     fn size_in_bytes(&self) -> usize;
 
+    // Iterators over entries.
     fn iter(&self) -> Iter<'_, Self::Entry>;
     fn iter_mut(&mut self) -> IterMut<'_, Self::Entry>;
 
+    // Get entry at index.
     fn at(&self, index: usize) -> Option<&Self::Entry>;
     fn at_mut(&mut self, index: usize) -> Option<&mut Self::Entry>;
 
+    // Raw access to underlying bytes.
     fn raw_bytes(&self) -> &[u8];
     fn raw_bytes_mut(&mut self) -> &mut [u8];
 }
@@ -307,14 +310,14 @@ impl<const N: usize> MsiXTableAccessor for [MsiXEntry; N] {
     }
 
     fn raw_bytes(&self) -> &[u8] {
-        // SAFETY: an array is guaranteed to be a continuous block of memory
+        // SAFETY: an array is guaranteed to be a continuous block of memory.
         let ptr = self.as_ptr() as *const u8;
         let len = mem::size_of_val(self);
         unsafe { slice::from_raw_parts(ptr, len) }
     }
 
     fn raw_bytes_mut(&mut self) -> &mut [u8] {
-        // SAFETY: an array is guaranteed to be a continuous block of memory
+        // SAFETY: an array is guaranteed to be a continuous block of memory.
         let ptr = self.as_mut_ptr() as *mut u8;
         let len = mem::size_of_val(self);
         unsafe { slice::from_raw_parts_mut(ptr, len) }
@@ -353,14 +356,14 @@ impl<const N: usize> MsiXTableAccessor for [PbaEntry; N] {
     }
 
     fn raw_bytes(&self) -> &[u8] {
-        // SAFETY: an array is guaranteed to be a continuous block of memory
+        // SAFETY: an array is guaranteed to be a continuous block of memory.
         let ptr = self.as_ptr() as *const u8;
         let len = mem::size_of_val(self);
         unsafe { slice::from_raw_parts(ptr, len) }
     }
 
     fn raw_bytes_mut(&mut self) -> &mut [u8] {
-        // SAFETY: an array is guaranteed to be a continuous block of memory
+        // SAFETY: an array is guaranteed to be a continuous block of memory.
         let ptr = self.as_mut_ptr() as *mut u8;
         let len = mem::size_of_val(self);
         unsafe { slice::from_raw_parts_mut(ptr, len) }
@@ -398,7 +401,7 @@ where
     MsiXTableT: MsiXTable,
     PbaTableT: PbaTable,
 {
-    fn is_valid_vector(&mut self, _config: &PciConfigurationSpace, vector: PciMsiVector) -> bool {
+    fn is_valid_vector(&self, _config: &PciConfigurationSpace, vector: PciMsiVector) -> bool {
         is_valid_vector(&self.msix_table, vector)
     }
 
@@ -408,7 +411,7 @@ where
         control & MESSAGE_CONTROL_MSIX_EN != 0
     }
 
-    fn is_pending(&mut self, vector: PciMsiVector) -> bool {
+    fn is_pending(&self, _config: &PciConfigurationSpace, vector: PciMsiVector) -> bool {
         self.pba_table.is_pending(vector)
     }
 
@@ -423,7 +426,7 @@ where
         self.pba_table.set_pending_bit(vector, pending)
     }
 
-    fn is_masked(&mut self, config: &PciConfigurationSpace, vector: PciMsiVector) -> bool {
+    fn is_masked(&self, config: &PciConfigurationSpace, vector: PciMsiVector) -> bool {
         let Some(entry) = self.msix_table.at(vector) else {
             return false;
         };
@@ -431,7 +434,11 @@ where
         self.is_fn_masked(config) || entry.is_masked()
     }
 
-    fn get_message_for(&mut self, vector: PciMsiVector) -> Result<PciMsiMessage> {
+    fn get_message_for(
+        &mut self,
+        _config: &PciConfigurationSpace,
+        vector: PciMsiVector,
+    ) -> Result<PciMsiMessage> {
         let Some(entry) = self.msix_table.at(vector) else {
             return Err(Error::InvalidMsiXVector { vector });
         };
@@ -477,7 +484,7 @@ where
     PbaTableT: PbaTable,
 {
     type Context<'a> = &'a mut dyn PciInterruptController;
-    type R = PciInterruptConfigEvent;
+    type R = ();
 
     fn postprocess_write_config(
         &mut self,
@@ -490,7 +497,7 @@ where
 
         if range_overlaps(offset, size, control, 2) && !is_fn_masked(config.read_word(control)) {
             evaluate_pending_interrupts(self, config, *interrupt_controller);
-            return Ok(PciHandlerResult::Handled(PciInterruptConfigEvent::Other));
+            return Ok(PciHandlerResult::Handled(()));
         }
 
         Ok(PciHandlerResult::Unhandled)
@@ -541,7 +548,7 @@ where
     PbaTableT: PbaTable,
 {
     type Context<'a> = MsiXBarHandlerContext<'a>;
-    type R = PciInterruptConfigEvent;
+    type R = Option<PciConfigurationUpdate>;
 
     fn read_bar(
         &mut self,
@@ -562,7 +569,7 @@ where
                 .unwrap_or_else(|_| data.fill(0x00)),
         };
 
-        Ok(PciInterruptConfigEvent::Other)
+        Ok(None)
     }
 
     fn write_bar(
@@ -581,15 +588,16 @@ where
             if targets_vector_control(offset, data.len()) {
                 evaluate_pending_interrupts(self, context.config, context.irq_controller);
             }
-            if targets_message_data(offset, data.len()) {
+            // Report MSI message address/data update.
+            if targets_message_info(offset, data.len()) {
                 let vector = offset_to_vector(offset);
-                let msg = self.get_message_for(vector)?;
+                let msg = self.get_message_for(context.config, vector)?;
 
-                return Ok(PciInterruptConfigEvent::MsiMessageUpdate(vector, msg));
+                return Ok(Some(PciConfigurationUpdate::MsiXMessage(vector, msg)));
             }
         }
 
-        Ok(PciInterruptConfigEvent::Other)
+        Ok(None)
     }
 }
 
@@ -619,6 +627,17 @@ fn targets_message_data(offset: u64, size: usize) -> bool {
         message_data_offs,
         message_data_size,
     )
+}
+
+fn targets_message_address(offset: u64, size: usize) -> bool {
+    let message_addr_size = (mem::size_of_val(&{ MsiXEntry::default().msg_addr })
+        + mem::size_of_val(&{ MsiXEntry::default().msg_addr_hi }))
+        as u64;
+    range_overlaps(offset % entry_size(), size as u64, 0, message_addr_size)
+}
+
+fn targets_message_info(offset: u64, size: usize) -> bool {
+    targets_message_address(offset, size) || targets_message_data(offset, size)
 }
 
 fn offset_to_vector(offset: u64) -> usize {
@@ -701,13 +720,14 @@ where
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use std::array::from_fn;
     use std::mem::size_of;
 
     use crate::bar::PciBarIndex;
     use crate::configuration_space::PciConfigurationSpace;
-    use crate::registers::{PCI_COMMAND, PCI_COMMAND_BUS_MASTER_MASK};
+    use crate::msi::tests::set_bus_master;
+    use crate::msi::tests::TestIrqController;
 
     use super::*;
 
@@ -938,11 +958,11 @@ pub mod tests {
 
         msix.set_pending_bit(&mut config, 10, true)
             .expect("set pending_bit");
-        assert!(msix.is_pending(10));
+        assert!(msix.is_pending(&config, 10));
         assert!(msix.pba_table.at(0).unwrap().pending_bits & (1 << 10) == (1 << 10));
         msix.set_pending_bit(&mut config, 10, false)
             .expect("set pending_bit");
-        assert!(!msix.is_pending(10));
+        assert!(!msix.is_pending(&config, 10));
         assert!(msix.pba_table.at(0).unwrap().pending_bits & (1 << 10) == 0);
     }
 
@@ -965,38 +985,6 @@ pub mod tests {
         assert_eq!(find_pending_vector(&pba_table, start), None);
     }
 
-    // IRL the driver controls bus master bit.
-    pub fn set_bus_master(config: &mut PciConfigurationSpace, enable: bool) {
-        let mut command = config.read_word(PCI_COMMAND);
-
-        if enable {
-            command |= PCI_COMMAND_BUS_MASTER_MASK;
-        } else {
-            command &= !PCI_COMMAND_BUS_MASTER_MASK;
-        }
-
-        config.set_word(PCI_COMMAND, command);
-    }
-
-    #[derive(Debug, Default)]
-    pub struct TestIrqController {
-        messages: Vec<PciMsiMessage>,
-    }
-
-    impl PciInterruptController for TestIrqController {
-        fn set_interrupt(
-            &mut self,
-            _line: crate::intx::PciInterruptLine,
-            _state: crate::intx::PciInterruptLineState,
-        ) {
-            unreachable!()
-        }
-
-        fn send_msi(&mut self, message: PciMsiMessage) {
-            self.messages.push(message);
-        }
-    }
-
     #[test]
     fn test_generate_message() {
         let mut config = PciConfigurationSpace::new();
@@ -1011,7 +999,10 @@ pub mod tests {
         set_bus_master(&mut config, true);
 
         // Is not enabled
-        assert_eq!(m.try_generate_message(&mut config, 0), Err(Error::NoMsi));
+        assert_eq!(
+            m.try_generate_message(&mut config, 0),
+            Err(Error::MsiDisabled)
+        );
 
         let control_offset = control_offset(&m);
         config.set_word(
@@ -1037,7 +1028,7 @@ pub mod tests {
             m.try_generate_message(&mut config, 0),
             Ok(PciMsiGenerationResult::Masked)
         );
-        assert!(m.is_pending(0));
+        assert!(m.is_pending(&config, 0));
 
         m.set_pending_bit(&mut config, 0, false).unwrap();
         m.msix_table.at_mut(0).unwrap().vector_control = 1;
@@ -1048,7 +1039,7 @@ pub mod tests {
             m.try_generate_message(&mut config, 0),
             Ok(PciMsiGenerationResult::Masked)
         );
-        assert!(m.is_pending(0));
+        assert!(m.is_pending(&config, 0));
 
         m.msix_table.at_mut(0).unwrap().vector_control = 0;
         // Generates message, handles alignment (CAFE -> CAFC)...
@@ -1064,7 +1055,7 @@ pub mod tests {
         );
 
         // ... and clears pending bit.
-        assert!(!m.is_pending(0));
+        assert!(!m.is_pending(&config, 0));
     }
 
     fn setup_entries(msix_table: &mut impl MsiXTable) {

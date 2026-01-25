@@ -2,7 +2,7 @@
 // Copyright (c) 2025 Markku Ahvenjärvi
 use crate::bar::PciBarIndex;
 use crate::configuration_space::PciConfigurationSpace;
-use crate::function::{PciHandlerResult, PciInterruptConfigEvent};
+use crate::function::{PciConfigurationUpdate, PciHandlerResult};
 use crate::intx;
 use crate::intx::{PciInterruptLineState, PciIntx};
 use crate::msi::{PciMsiGenerationResult, PciMsiMessageSource, PciMsiVector};
@@ -29,7 +29,7 @@ pub trait PciInterruptSignaler {
         &mut self,
         offset: usize,
         size: usize,
-    ) -> Result<PciHandlerResult<PciInterruptConfigEvent>> {
+    ) -> Result<PciHandlerResult<Option<PciConfigurationUpdate>>> {
         let _ = offset;
         let _ = size;
 
@@ -39,7 +39,7 @@ pub trait PciInterruptSignaler {
         &mut self,
         offset: usize,
         size: usize,
-    ) -> Result<PciHandlerResult<PciInterruptConfigEvent>> {
+    ) -> Result<PciHandlerResult<Option<PciConfigurationUpdate>>> {
         let _ = offset;
         let _ = size;
 
@@ -51,7 +51,7 @@ pub trait PciInterruptSignaler {
         bar: PciBarIndex,
         offset: u64,
         data: &mut [u8],
-    ) -> Result<PciHandlerResult<PciInterruptConfigEvent>> {
+    ) -> Result<PciHandlerResult<Option<PciConfigurationUpdate>>> {
         let _ = bar;
         let _ = offset;
         let _ = data;
@@ -64,7 +64,7 @@ pub trait PciInterruptSignaler {
         bar: PciBarIndex,
         offset: u64,
         data: &[u8],
-    ) -> Result<PciHandlerResult<PciInterruptConfigEvent>> {
+    ) -> Result<PciHandlerResult<Option<PciConfigurationUpdate>>> {
         let _ = bar;
         let _ = offset;
         let _ = data;

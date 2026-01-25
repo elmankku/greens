@@ -46,7 +46,6 @@ pub enum Error {
     DeviceAreaBounds { offset: usize, limit: usize },
     InvalidMsiVector { vector: u8 },
     InvalidMultipleMessageValue { value: u16 },
-    NoMsi,
     MsiDisabled,
     NotBusMaster,
     InvalidFunction { function: usize },
@@ -55,6 +54,7 @@ pub enum Error {
     InvalidMsiXTableOffset { offset: u64 },
     InvalidMsiXTableSize { size: usize },
     InvalidMsiXBarSize { size: u64 },
+    VectorNotMasked { vector: usize },
 }
 
 impl fmt::Display for Error {
@@ -68,7 +68,6 @@ impl fmt::Display for Error {
             BarRegionOverflow { address, size } => {
                 write!(f, "bar at {address} with {size} would overflow")
             }
-
             InvalidBarAlignment { address, size } => {
                 write!(f, "bar is not naturally aligned: {address} % {size} != 0")
             }
@@ -79,7 +78,6 @@ impl fmt::Display for Error {
             InvalidAccessAlignment { offset, size } => {
                 write!(f, "offset `{offset}` not aligned to size `{size}`")
             }
-
             AccessBounds { offset, size } => write!(
                 f,
                 "access to offset `{offset}` with `{size}` bytes is out of bounds"
@@ -98,7 +96,6 @@ impl fmt::Display for Error {
             InvalidMultipleMessageValue { value } => {
                 write!(f, "invalid msi multiple message value: {value}")
             }
-            NoMsi => write!(f, "no msi configured for the device"),
             MsiDisabled => write!(f, "msi disabled for the device"),
             NotBusMaster => write!(f, "device is not bus master"),
             InvalidFunction { function } => write!(f, "invalid device function: {function}"),
@@ -107,6 +104,7 @@ impl fmt::Display for Error {
             InvalidMsiXTableOffset { offset } => write!(f, "invalid msix table offset: {offset}"),
             InvalidMsiXTableSize { size } => write!(f, "invalid msix table size: {size}"),
             InvalidMsiXBarSize { size } => write!(f, "invalid msix bar region size: {size}"),
+            VectorNotMasked { vector } => write!(f, "invalid state: vector {vector} not masked"),
         }
     }
 }
