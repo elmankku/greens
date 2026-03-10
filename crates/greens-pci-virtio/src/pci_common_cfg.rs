@@ -4,7 +4,7 @@ use greens_pci::bar::PciBarIndex;
 use greens_pci::bar_region::{PciBarRegion, PciBarRegionHandler, PciBarRegionInfo};
 use greens_pci::capability::{PciCapability, PciCapabilityId};
 use greens_pci::utils::{
-    from_little_endian, read, set, set_byte, set_word, to_little_endian, write, EndianSwapSize,
+    EndianSwapSize, from_little_endian, read, set, set_byte, set_word, to_little_endian, write,
 };
 use greens_pci::{Error, Result};
 use virtio_queue::{Queue, QueueT};
@@ -517,13 +517,13 @@ Config,
 pub mod tests {
     use std::borrow::{Borrow, BorrowMut};
 
-    use greens_pci::configuration_space::PciConfigurationSpace;
     use greens_pci::PciMsiMessage;
+    use greens_pci::configuration_space::PciConfigurationSpace;
     use virtio_device::{VirtioConfig, VirtioDeviceActions, VirtioDeviceType, WithDriverSelect};
 
     use super::*;
-    use crate::pci_cap::tests::{check_cap, check_cap_offs_len};
     use crate::pci_cap::VIRTIO_CAP_SIZE;
+    use crate::pci_cap::tests::{check_cap, check_cap_offs_len};
     use crate::pci_isr_cfg::VirtioPciIsrState;
 
     #[test]

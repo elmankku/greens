@@ -11,7 +11,7 @@ use greens_pci::{Error, Result};
 use virtio_queue::Queue;
 
 use crate::pci::VirtioPciDevice;
-use crate::pci_cap::{virtio_cap_len, VirtioPciCap, VirtioPciCapType, VIRTIO_CAP_SIZE};
+use crate::pci_cap::{VIRTIO_CAP_SIZE, VirtioPciCap, VirtioPciCapType, virtio_cap_len};
 
 pub(crate) const REG_NOTIFY_OFF_MULTIPLIER: usize = 14;
 pub(crate) const VIRTIO_NOTIFY_CAP_SIZE: usize = VIRTIO_CAP_SIZE + 4;

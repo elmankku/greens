@@ -4,8 +4,8 @@ use std::borrow::Borrow;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::os::fd::AsRawFd;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use greens_pci::PciMsiMessage;
 use greens_pci_virtio::pci::VirtioPciDevice;
@@ -15,12 +15,12 @@ use greens_pci_virtio::pci_notify_cfg::VirtioPciNotifyCfgInfo;
 use greens_sys_linux::eventfd::EventFdBinder;
 use greens_sys_linux::eventfd::IoEventFdConfig;
 use greens_sys_linux::eventfd::IrqFdConfig;
-use vhost::net::VhostNet;
-use vhost::vhost_kern::net::Net;
-use vhost::vhost_kern::VhostKernBackend;
 use vhost::VhostBackend;
 use vhost::VhostUserMemoryRegionInfo;
 use vhost::VringConfigData;
+use vhost::net::VhostNet;
+use vhost::vhost_kern::VhostKernBackend;
+use vhost::vhost_kern::net::Net;
 use virtio_bindings::virtio_config::VIRTIO_F_ACCESS_PLATFORM;
 use virtio_bindings::virtio_config::VIRTIO_F_NOTIFICATION_DATA;
 use virtio_bindings::virtio_config::VIRTIO_F_RING_RESET;
@@ -43,8 +43,8 @@ use vm_memory::GuestAddressSpace;
 use vm_memory::GuestMemory;
 use vm_memory::GuestMemoryMmap;
 use vm_memory::GuestMemoryRegion;
-use vmm_sys_util::eventfd::EventFd;
 use vmm_sys_util::eventfd::EFD_NONBLOCK;
+use vmm_sys_util::eventfd::EventFd;
 
 use crate::tap::Tap;
 

@@ -9,7 +9,7 @@ use greens_pci::function::{
     PciFunctionWithInterrupts, PciHandlerResult, PciInterruptConfigHandler,
 };
 use greens_pci::interrupt::PciInterruptType::{Intx, MsiX, NoInterrupt};
-use greens_pci::interrupt::{handle_intx, handle_msi, PciInterruptSignaler};
+use greens_pci::interrupt::{PciInterruptSignaler, handle_intx, handle_msi};
 use greens_pci::intx;
 use greens_pci::intx::{PciInterruptLineConfig, PciIntx, PciIntxConfig, PciIntxPin};
 use greens_pci::msi::PciMsiMessageSource;

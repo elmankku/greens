@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Markku Ahvenjärvi
 use crate::bindings::rpcmsg_t;
-use crate::bindings::{rpc_ioreq_address_space, rpc_ioreq_direction, rpc_ioreq_len};
 use crate::bindings::{RPC_ADDRESS_SPACE_GLOBAL, RPC_MR0_MMIO_DIRECTION_WRITE};
+use crate::bindings::{rpc_ioreq_address_space, rpc_ioreq_direction, rpc_ioreq_len};
 use greens_core::ioreq::{AddressSpace, IoOperation, IoRequest};
 
 impl From<&rpcmsg_t> for IoRequest {

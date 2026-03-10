@@ -4,22 +4,17 @@ use std::env;
 use std::path::PathBuf;
 
 use bindgen::callbacks::{DeriveInfo, ParseCallbacks};
-use bindgen::RegexSet;
 
 #[derive(Debug)]
 struct ExtraDeriveCallback {
-    regex: bindgen::RegexSet,
+    names: Vec<String>,
     derives: Vec<String>,
 }
 
 impl ExtraDeriveCallback {
-    fn new(regex: &str, derives: &str) -> Self {
-        let mut regex_set = RegexSet::new();
-        regex_set.insert(regex);
-        regex_set.build(true);
-
+    fn new(name: &str, derives: &str) -> Self {
         Self {
-            regex: regex_set,
+            names: vec![name.to_owned()],
             derives: derives.split(',').map(|s| s.to_owned()).collect(),
         }
     }
@@ -27,7 +22,7 @@ impl ExtraDeriveCallback {
 
 impl ParseCallbacks for ExtraDeriveCallback {
     fn add_derives(&self, info: &DeriveInfo<'_>) -> Vec<String> {
-        if self.regex.matches(info.name) {
+        if self.names.iter().any(|n| n == info.name) {
             return self.derives.clone();
         }
 

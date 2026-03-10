@@ -2,7 +2,7 @@
   description = "Greens - a collection of small virtual devices";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
     pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
     # To test locally:
     # nix build --override-input sel4-virt ../kmod-sel4-virt
@@ -12,13 +12,15 @@
     };
   };
 
-  outputs = { self, nixpkgs, ... }@inputs:
+  outputs =
+    { self, nixpkgs, ... }@inputs:
     let
-      supportedSystems = [ "x86_64-linux" "aarch64-linux" ];
+      supportedSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-      pkgsFor = forAllSystems (system:
-        import nixpkgs { system = system; }
-      );
+      pkgsFor = forAllSystems (system: import nixpkgs { system = system; });
     in
     {
       checks = forAllSystems (system: {
@@ -55,4 +57,3 @@
       });
     };
 }
-

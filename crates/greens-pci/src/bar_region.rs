@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Markku Ahvenjärvi
+use crate::Result;
 use crate::bar::PciBarIndex;
 use crate::function::PciHandlerResult;
 use crate::utils::range_contains;
-use crate::Result;
 
 #[derive(Debug, Clone)]
 pub struct PciBarRegionInfo {

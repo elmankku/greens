@@ -4,11 +4,10 @@ use crate::bar::{PciBar, PciBarIndex, PciBarType};
 use crate::capability::{PciCapOffset, PciCapability};
 use crate::registers::*;
 use crate::utils::register_block::{
-    validate_bounds, CheckedRegisterBlockReader, CheckedRegisterBlockSetter,
-    CheckedRegisterBlockWriter, ReadableRegisterBlock, RegisterBlockAccessValidator,
-    RegisterBlockAutoImpl, RegisterBlockReader, RegisterBlockSetter,
-    RegisterBlockWriteAccessValidator, RegisterBlockWriter, SettableRegisterBlock,
-    WritableRegisterBlock,
+    CheckedRegisterBlockReader, CheckedRegisterBlockSetter, CheckedRegisterBlockWriter,
+    ReadableRegisterBlock, RegisterBlockAccessValidator, RegisterBlockAutoImpl,
+    RegisterBlockReader, RegisterBlockSetter, RegisterBlockWriteAccessValidator,
+    RegisterBlockWriter, SettableRegisterBlock, WritableRegisterBlock, validate_bounds,
 };
 use crate::{Error, Result};
 
@@ -124,12 +123,11 @@ impl PciConfigurationSpace {
         }
 
         // Check the previous BAR; if it is 64bit, the BAR is in use
-        if let Some(prev_index) = index.checked_sub(1) {
-            if let Some(prev) = self.bars[prev_index] {
-                if let PciBarType::Memory64Bit(_) = prev.region_type() {
-                    return Err(Error::BarInUse { index });
-                }
-            }
+        if let Some(prev_index) = index.checked_sub(1)
+            && let Some(prev) = self.bars[prev_index]
+            && let PciBarType::Memory64Bit(_) = prev.region_type()
+        {
+            return Err(Error::BarInUse { index });
         }
 
         let address = bar.address().unwrap_or(0);
@@ -280,7 +278,7 @@ impl PciConfigurationSpace {
         self.set_capability_data(cap, cap_start)
     }
 
-    pub fn capability_iter(&self) -> PciCapabilitiesList {
+    pub fn capability_iter(&self) -> PciCapabilitiesList<'_> {
         PciCapabilitiesList::new(self)
     }
 
@@ -470,10 +468,10 @@ fn validate_bar_region(bar: &PciBar) -> Result<()> {
             .checked_add(size)
             .ok_or(Error::BarRegionOverflow { address, size })?;
 
-        if let PciBarType::Memory32Bit(_) | PciBarType::Io = bar.region_type() {
-            if end_address > u64::from(u32::MAX) {
-                return Err(Error::BarRegionOverflow { address, size });
-            }
+        if let PciBarType::Memory32Bit(_) | PciBarType::Io = bar.region_type()
+            && end_address > u64::from(u32::MAX)
+        {
+            return Err(Error::BarRegionOverflow { address, size });
         }
     }
 

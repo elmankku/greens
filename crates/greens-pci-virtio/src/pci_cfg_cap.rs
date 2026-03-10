@@ -6,8 +6,8 @@ use greens_pci::function::{PciFunction, PciFunctionConfigAccessor};
 use greens_pci::utils::range_overlaps;
 use greens_pci::utils::register_block::set_dword;
 
-use crate::pci_cap::{virtio_cap_len, VirtioPciCap, VirtioPciCapType};
 use crate::pci_cap::{REG_BAR, REG_LENGTH, REG_OFFSET, VIRTIO_CAP_SIZE};
+use crate::pci_cap::{VirtioPciCap, VirtioPciCapType, virtio_cap_len};
 
 pub(crate) const REG_PCI_CFG_DATA: usize = 14;
 pub(crate) const VIRTIO_PCI_CFG_CAP_SIZE: usize = VIRTIO_CAP_SIZE + 4;

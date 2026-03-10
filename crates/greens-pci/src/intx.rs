@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Markku Ahvenjärvi
+use crate::PciInterruptController;
 use crate::configuration_space::PciConfigurationSpace;
 use crate::registers::{
     PCI_COMMAND, PCI_COMMAND_INTERRUPT_DISABLE_MASK, PCI_INTERRUPT_LINE, PCI_INTERRUPT_PIN,
     PCI_STATUS, PCI_STATUS_INTERRUPT_STATUS_MASK,
 };
 use crate::utils::range_overlaps;
-use crate::PciInterruptController;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PciInterruptLineState {

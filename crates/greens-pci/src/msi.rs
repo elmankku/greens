@@ -3,13 +3,13 @@
 use std::marker::PhantomData;
 use std::mem;
 
+use crate::PciInterruptController;
 use crate::capability::{PciCapOffset, PciCapability, PciCapabilityId};
 use crate::config_handler::PciConfigurationSpaceIoHandler;
-use crate::configuration_space::{is_bus_master, PciConfigurationSpace};
+use crate::configuration_space::{PciConfigurationSpace, is_bus_master};
 use crate::function::{PciConfigurationUpdate, PciHandlerResult};
 use crate::utils::range_overlaps;
 use crate::utils::register_block::{set_dword, set_word};
-use crate::PciInterruptController;
 use crate::{Error, PciMsiMessage, Result};
 
 pub type PciMsiVector = usize;

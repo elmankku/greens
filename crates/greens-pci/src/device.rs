@@ -3,7 +3,7 @@
 use crate::registers::{
     PCI_CONFIGURATION_SPACE_MAX_IO_SIZE, PCI_CONFIGURATION_SPACE_SIZE, PCI_MAX_DEVICE_FUNCTIONS,
 };
-use crate::utils::{from_little_endian, to_little_endian, EndianSwapSize};
+use crate::utils::{EndianSwapSize, from_little_endian, to_little_endian};
 use crate::{Error, Result};
 
 pub trait PciDevice {

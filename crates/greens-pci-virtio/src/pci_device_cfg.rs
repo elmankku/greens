@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Markku Ahvenjärvi
+use greens_pci::Result;
 use greens_pci::bar::PciBarIndex;
 use greens_pci::bar_region::{PciBarRegion, PciBarRegionHandler, PciBarRegionInfo};
 use greens_pci::capability::{PciCapability, PciCapabilityId};
-use greens_pci::Result;
 use virtio_queue::Queue;
 
 use crate::pci::VirtioPciDevice;
@@ -93,8 +93,8 @@ pub mod tests {
     use greens_pci::configuration_space::PciConfigurationSpace;
 
     use super::*;
-    use crate::pci_cap::tests::{check_cap, check_cap_offs_len, check_cap_ro_fields};
     use crate::pci_cap::VIRTIO_CAP_SIZE;
+    use crate::pci_cap::tests::{check_cap, check_cap_offs_len, check_cap_ro_fields};
     use crate::pci_common_cfg::tests::TestDevice;
 
     #[test]

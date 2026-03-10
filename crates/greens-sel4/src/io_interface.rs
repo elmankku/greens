@@ -16,8 +16,6 @@ use vm_memory::guest_memory::FileOffset;
 use vm_memory::{GuestAddress, GuestMemoryMmap, GuestRegionMmap, MmapRegion};
 use vmm_sys_util::ioctl::{ioctl, ioctl_with_ptr, ioctl_with_val};
 
-use crate::bindings::{sel4_ioeventfd_config, sel4_irqfd_config};
-use crate::bindings::{sel4_irqline, sel4_vm_params, sel4_vpci_device};
 use crate::bindings::{
     IOBUF_NUM_PAGES, SEL4_IRQ_OP_CLR, SEL4_IRQ_OP_PULSE, SEL4_IRQ_OP_SET, SEL4_MEM_MAP_EVENT_BAR,
     SEL4_MEM_MAP_IOBUF, SEL4_MEM_MAP_RAM,
@@ -29,6 +27,8 @@ use crate::bindings::{
 };
 use crate::bindings::{SEL4_IOEVENTFD, SEL4_IRQFD_FLAG_DEASSIGN};
 use crate::bindings::{SEL4_IOEVENTFD_FLAG_DATAMATCH, SEL4_IOEVENTFD_FLAG_DEASSIGN};
+use crate::bindings::{sel4_ioeventfd_config, sel4_irqfd_config};
+use crate::bindings::{sel4_irqline, sel4_vm_params, sel4_vpci_device};
 use crate::io_interface_config::io_interface_config;
 use crate::rpc::{DriverRpc, MmioDoorbell, RpcError};
 

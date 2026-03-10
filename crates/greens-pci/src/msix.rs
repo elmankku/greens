@@ -8,14 +8,14 @@ use std::slice::{Iter, IterMut};
 use crate::bar_region::{PciBarRegionInfo, PciBarRegionSet, PciBarRegionSetHandler};
 use crate::capability::{PciCapOffset, PciCapability, PciCapabilityId};
 use crate::config_handler::PciConfigurationSpaceIoHandler;
-use crate::configuration_space::{allow_bus_master, PciConfigurationSpace};
+use crate::configuration_space::{PciConfigurationSpace, allow_bus_master};
 use crate::function::{PciConfigurationUpdate, PciHandlerResult};
 use crate::msi::{PciMsiGenerationResult, PciMsiMessageSource, PciMsiVector};
 use crate::utils::range_overlaps;
 use crate::utils::register_block::{
-    set_dword, set_word, CheckedRegisterBlockAutoImpl, CheckedRegisterBlockReader,
-    CheckedRegisterBlockSetter, ReadableRegisterBlock, RegisterBlockAccessValidator,
-    RegisterBlockAutoImpl, SettableRegisterBlock,
+    CheckedRegisterBlockAutoImpl, CheckedRegisterBlockReader, CheckedRegisterBlockSetter,
+    ReadableRegisterBlock, RegisterBlockAccessValidator, RegisterBlockAutoImpl,
+    SettableRegisterBlock, set_dword, set_word,
 };
 use crate::{Error, PciInterruptController, PciMsiMessage, Result};
 
@@ -726,8 +726,8 @@ mod tests {
 
     use crate::bar::PciBarIndex;
     use crate::configuration_space::PciConfigurationSpace;
-    use crate::msi::tests::set_bus_master;
     use crate::msi::tests::TestIrqController;
+    use crate::msi::tests::set_bus_master;
 
     use super::*;
 
@@ -823,9 +823,11 @@ mod tests {
         assert_eq!(t.size_in_bytes(), mem::size_of::<MsiXEntry>() * t.len());
 
         // test iterator
-        assert!(MsiXTableAccessor::iter(&t)
-            .enumerate()
-            .all(|(i, x)| x.msg_addr == i as u32 + 1));
+        assert!(
+            MsiXTableAccessor::iter(&t)
+                .enumerate()
+                .all(|(i, x)| x.msg_addr == i as u32 + 1)
+        );
 
         // test mut iterator
         MsiXTableAccessor::iter_mut(&mut t)
@@ -838,12 +840,13 @@ mod tests {
         }));
 
         // test byte slice
-        assert!(t
-            .raw_bytes()
-            .iter()
-            .step_by(size_of::<MsiXEntry>())
-            .enumerate()
-            .all(|(i, x)| { *x == i as u8 + 1 }));
+        assert!(
+            t.raw_bytes()
+                .iter()
+                .step_by(size_of::<MsiXEntry>())
+                .enumerate()
+                .all(|(i, x)| { *x == i as u8 + 1 })
+        );
 
         // test mut byte slice
         t.raw_bytes_mut()[4..8].copy_from_slice(&[0xFFu8; 4]);
@@ -861,26 +864,31 @@ mod tests {
         assert_eq!(t.size_in_bytes(), size_of::<PbaEntry>() * t.len());
 
         // test iterator
-        assert!(MsiXTableAccessor::iter(&t)
-            .enumerate()
-            .all(|(i, x)| x.pending_bits == i as u64 + 1));
+        assert!(
+            MsiXTableAccessor::iter(&t)
+                .enumerate()
+                .all(|(i, x)| x.pending_bits == i as u64 + 1)
+        );
 
         // test mut iterator
         MsiXTableAccessor::iter_mut(&mut t)
             .enumerate()
             .for_each(|(i, x)| x.pending_bits = i as u64 + 10);
 
-        assert!(MsiXTableAccessor::iter(&t)
-            .enumerate()
-            .all(|(i, x)| { x.pending_bits == i as u64 + 10 }));
+        assert!(
+            MsiXTableAccessor::iter(&t)
+                .enumerate()
+                .all(|(i, x)| { x.pending_bits == i as u64 + 10 })
+        );
 
         // test byte slice
-        assert!(t
-            .raw_bytes()
-            .iter()
-            .step_by(size_of::<PbaEntry>())
-            .enumerate()
-            .all(|(i, x)| { *x == i as u8 + 10 }));
+        assert!(
+            t.raw_bytes()
+                .iter()
+                .step_by(size_of::<PbaEntry>())
+                .enumerate()
+                .all(|(i, x)| { *x == i as u8 + 10 })
+        );
 
         // test mut byte slice
         t.raw_bytes_mut()[0..8].copy_from_slice(&[0xFFu8; 8]);

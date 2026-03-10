@@ -1,7 +1,7 @@
 [package]
 name = "greens-sel4-pci-vhost-net"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 
 [dependencies]
@@ -10,7 +10,7 @@ greens-core = { path = "../greens-core" }
 greens-sys-linux = { path = "../greens-sys-linux" }
 greens-sel4 = { path = "../greens-sel4" }
 greens-pci-virtio = { path = "../greens-pci-virtio" }
-thiserror = "1.0"
+thiserror = "2.0"
 argh = "0.1"
 virtio-bindings = { git = "https://github.com/rust-vmm/vm-virtio", rev = "ef53fb803aca6b4c1dcabf183748375d3f29ded4" }
 virtio-device = { git = "https://github.com/rust-vmm/vm-virtio", rev = "ef53fb803aca6b4c1dcabf183748375d3f29ded4" }

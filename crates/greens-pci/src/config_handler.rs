@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Markku Ahvenjärvi
+use crate::Result;
 use crate::configuration_space::PciConfigurationSpace;
 use crate::function::PciHandlerResult;
-use crate::Result;
 
 /// A trait to handle read and write operations to PCI configuration space.
 ///

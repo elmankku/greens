@@ -115,12 +115,12 @@ impl<T: MemoryRegion, U: Doorbell> DriverRpc<T, U> {
 pub mod tests {
     use super::*;
     use crate::bindings::{
-        driver_rpc_req_mmio_start, rpc_ioreq_address_space, rpc_ioreq_direction, rpc_ioreq_len,
-        rpc_ioreq_slot,
-    };
-    use crate::bindings::{
         IOBUF_NUM_PAGES, RPC_ADDRESS_SPACE_GLOBAL, RPC_MR0_MMIO_DIRECTION_READ,
         RPC_MR0_MMIO_DIRECTION_WRITE,
+    };
+    use crate::bindings::{
+        driver_rpc_req_mmio_start, rpc_ioreq_address_space, rpc_ioreq_direction, rpc_ioreq_len,
+        rpc_ioreq_slot,
     };
     use std::alloc::{self, Layout};
 
