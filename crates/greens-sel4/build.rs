@@ -35,6 +35,8 @@ fn build_libextern(include_path: Option<String>) {
         .file(std::env::temp_dir().join("bindgen").join("extern.c"))
         .extra_warnings(true)
         .warnings(true)
+        .flag_if_supported("-Wno-discarded-qualifiers")
+        .flag_if_supported("-Wno-duplicate-decl-specifier")
         .include(".")
         .includes(include_path)
         .compile("libextern.a");
