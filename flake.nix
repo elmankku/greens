@@ -36,7 +36,13 @@
             # check nix formatting
             nixpkgs-fmt.enable = true;
             # check rust formatting
-            rustfmt.enable = true;
+            rustfmt = {
+              enable = true;
+              packageOverrides = {
+                cargo = pkgsFor.${system}.cargo;
+                rustfmt = pkgsFor.${system}.rustfmt;
+              };
+            };
             # check toml
             taplo.enable = true;
           };
