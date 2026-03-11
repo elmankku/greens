@@ -7,5 +7,5 @@ license = "MIT"
 [dependencies]
 greens-pci = { path = "../greens-pci", features = ["std"] }
 thiserror = "2.0"
-virtio-device = { git = "https://github.com/rust-vmm/vm-virtio", rev = "ef53fb803aca6b4c1dcabf183748375d3f29ded4" }
-virtio-queue = { git = "https://github.com/rust-vmm/vm-virtio", rev = "ef53fb803aca6b4c1dcabf183748375d3f29ded4" }
+virtio-device = { git = "https://github.com/rust-vmm/vm-virtio", tag = "virtio-queue-v0.17.0" }
+virtio-queue = { git = "https://github.com/rust-vmm/vm-virtio", tag = "virtio-queue-v0.17.0" }

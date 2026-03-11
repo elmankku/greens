@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2025 Markku Ahvenjärvi
+// Copyright (c) 2026 Markku Ahvenjärvi
 use std::borrow::Borrow;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
@@ -166,10 +166,10 @@ where
 {
     pub(crate) fn new(
         binder: Arc<T>,
-        guest_memory: Arc<GuestMemoryMmap>,
+        guest_memory: GuestMemoryMmap<()>,
         config: VhostNetConfig,
     ) -> Self {
-        let net = Net::new(guest_memory.clone()).unwrap();
+        let net = Net::new(Arc::new(guest_memory)).unwrap();
 
         net.set_owner().expect("set owner");
 

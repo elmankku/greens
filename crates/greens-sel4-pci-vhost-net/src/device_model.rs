@@ -32,7 +32,7 @@ impl<I: IoInterface, B: EventFdBinder> DeviceModel<I, B> {
     pub fn new(
         io_interface: Arc<I>,
         binder: Arc<B>,
-        guest_memory: Arc<GuestMemoryMmap>,
+        guest_memory: GuestMemoryMmap,
         config: VhostNetConfig,
     ) -> Self {
         let controller = InterruptController::new(io_interface.clone());

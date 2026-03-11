@@ -64,12 +64,12 @@ fn main() {
         .blocklist_item("__BITS_PER_LONG")
         .blocklist_item("__FD_SETSIZE")
         .blocklist_item("_?IOC.*")
-        .raw_line("use zerocopy::AsBytes;")
-        .raw_line("use zerocopy::FromBytes;")
-        .raw_line("use zerocopy::FromZeroes;");
+        .raw_line("use zerocopy::IntoBytes;")
+        .raw_line("use zerocopy::FromBytes;");
 
     // Add extra derives for certain types
-    let extra_derives = "FromZeroes,FromBytes,AsBytes";
+    // Note: FromZeros is implied by FromBytes in zerocopy 0.8+
+    let extra_derives = "FromBytes,IntoBytes";
     let derives_for = ["rpcmsg_t"];
 
     for regex in derives_for {

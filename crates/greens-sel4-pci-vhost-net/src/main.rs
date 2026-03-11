@@ -9,11 +9,13 @@ use greens_sel4::io_interface::Sel4IoInterface;
 
 use crate::device_model::DeviceModel;
 use crate::error::Error as DeviceModelError;
+use crate::guest_memory::build_guest_memory;
 use crate::pci::{InterruptController, VhostNetPci};
 use crate::vhost_net::{VhostNetConfig, VhostNetDevice};
 
 mod device_model;
 mod error;
+mod guest_memory;
 mod pci;
 mod tap;
 mod vhost_net;
@@ -66,13 +68,9 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     vmio.register_vpci_device()
         .map_err(DeviceModelError::Init)?;
+    let guest_memory = build_guest_memory(vmio.guest_memory())?;
 
-    let mut model = DeviceModel::new(
-        vmio.clone(),
-        vmio.clone(),
-        vmio.guest_memory().clone(),
-        config,
-    );
+    let mut model = DeviceModel::new(vmio.clone(), vmio.clone(), guest_memory, config);
 
     model.run()?;
 

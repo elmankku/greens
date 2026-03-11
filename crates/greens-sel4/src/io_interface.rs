@@ -3,7 +3,7 @@
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io;
-use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -12,8 +12,6 @@ use greens_core::io_interface::{InterruptLine, InterruptLineOperation, IoInterfa
 use greens_core::ioreq::IoRequest;
 use greens_sys_linux::eventfd::{EventFdBinder, IoEventFdConfig, IrqFdConfig};
 use greens_sys_linux::mmap::MemoryMapping;
-use vm_memory::guest_memory::FileOffset;
-use vm_memory::{GuestAddress, GuestMemoryMmap, GuestRegionMmap, MmapRegion};
 use vmm_sys_util::ioctl::{ioctl, ioctl_with_ptr, ioctl_with_val};
 
 use crate::bindings::{
@@ -34,6 +32,14 @@ use crate::rpc::{DriverRpc, MmioDoorbell, RpcError};
 
 type Result<T> = std::result::Result<T, Error>;
 
+#[derive(Debug)]
+pub struct GuestMemoryRegion {
+    pub fd: Arc<OwnedFd>,
+    pub fd_offset: u64,
+    pub size: usize,
+    pub guest_addr: u64,
+}
+
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
 pub enum Error {
@@ -53,9 +59,6 @@ pub enum Error {
         #[source]
         source: io::Error,
     },
-    #[error("failed to mmap guest ram: {0}")]
-    MmapGuestRam(#[from] vm_memory::mmap::MmapRegionError),
-    GuestRam(#[from] vm_memory::Error),
     #[error("failed to create vpci device: {0}")]
     CreateVpciDevice(io::Error),
     #[error("failed to signal ready: {0}")]
@@ -120,7 +123,7 @@ pub struct Sel4IoInterface {
     #[allow(dead_code)]
     device: File,
     control: File,
-    guest_memory: Arc<GuestMemoryMmap<()>>,
+    guest_memory: Vec<GuestMemoryRegion>,
     rpc: DriverRpc<MemoryMapping, MmioDoorbell<MemoryMapping>>,
     num_pcidevs: Arc<Mutex<PciDeviceNumber>>,
     ready: Arc<Mutex<bool>>,
@@ -149,18 +152,15 @@ impl Sel4IoInterface {
         let control = unsafe { File::from_raw_fd(fd) };
 
         // Map guest RAM pages
-        let regions = Self::map_guest_ram(
+        let guest_memory = vec![alloc_ram_fd(
             &control,
-            None,
             vm_params.ram_size as usize,
             io_cfg.ram_start,
-        )?;
-        let guest_memory = Arc::new(GuestMemoryMmap::from_regions(regions)?);
+        )?];
 
         // Map RPC pages
-        let io_mapping =
-            Self::map_buffer(&control, IoMapKind::IoBuf, IOBUF_NUM_PAGES as usize * 4096)?;
-        let event_mapping = Self::map_buffer(&control, IoMapKind::Event, 4096)?;
+        let io_mapping = map_buffer(&control, IoMapKind::IoBuf, IOBUF_NUM_PAGES as usize * 4096)?;
+        let event_mapping = map_buffer(&control, IoMapKind::Event, 4096)?;
         let doorbell = MmioDoorbell::new(event_mapping, None)?;
 
         let rpc = DriverRpc::new(io_mapping, doorbell)?;
@@ -175,7 +175,7 @@ impl Sel4IoInterface {
         })
     }
 
-    pub fn guest_memory(&self) -> &Arc<GuestMemoryMmap<()>> {
+    pub fn guest_memory(&self) -> &[GuestMemoryRegion] {
         &self.guest_memory
     }
 
@@ -209,55 +209,6 @@ impl Sel4IoInterface {
         }
     }
 
-    fn map_guest_ram(
-        control: &File,
-        start: Option<u64>,
-        size: usize,
-        guest_addr: u64,
-    ) -> Result<Vec<GuestRegionMmap>> {
-        let fd =
-            unsafe { ioctl_with_val(control, SEL4_CREATE_IO_HANDLER(), IoMapKind::Ram as u64) };
-        if fd < 0 {
-            return Err(Error::CreateIoHandler {
-                kind: IoMapKind::Ram.into(),
-                source: io::Error::last_os_error(),
-            });
-        }
-        let file = unsafe { File::from_raw_fd(fd) };
-
-        let region = MmapRegion::build(
-            Some(FileOffset::new(file, start.unwrap_or(0))),
-            size,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_SHARED,
-        )?;
-
-        let region = GuestRegionMmap::new(region, GuestAddress(guest_addr))?;
-
-        Ok(vec![region])
-    }
-
-    fn map_buffer(control: &File, kind: IoMapKind, size: usize) -> Result<MemoryMapping> {
-        let fd = unsafe { ioctl_with_val(control, SEL4_CREATE_IO_HANDLER(), kind as u64) };
-        if fd < 0 {
-            return Err(Error::CreateIoHandler {
-                kind: kind.into(),
-                source: io::Error::last_os_error(),
-            });
-        }
-
-        let file = unsafe { File::from_raw_fd(fd) };
-        let prot = libc::PROT_READ | libc::PROT_WRITE;
-        let flags = libc::MAP_SHARED;
-
-        MemoryMapping::try_mmap(None, size, prot, flags, Some(&file), None).map_err(|e| {
-            Error::MmapIoHandler {
-                kind: kind.into(),
-                source: e,
-            }
-        })
-    }
-
     fn wait_io(&self) -> Result<()> {
         // FIXME: First check if there are messages in the queue
         // If not, do ioctl. When ioctl returns, return message.
@@ -268,6 +219,44 @@ impl Sel4IoInterface {
             _ => Ok(()),
         }
     }
+}
+
+fn alloc_ram_fd(control: &File, size: usize, guest_addr: u64) -> Result<GuestMemoryRegion> {
+    let raw_fd =
+        unsafe { ioctl_with_val(control, SEL4_CREATE_IO_HANDLER(), IoMapKind::Ram as u64) };
+    if raw_fd < 0 {
+        return Err(Error::CreateIoHandler {
+            kind: IoMapKind::Ram.into(),
+            source: io::Error::last_os_error(),
+        });
+    }
+    Ok(GuestMemoryRegion {
+        fd: Arc::new(unsafe { OwnedFd::from_raw_fd(raw_fd) }),
+        fd_offset: 0,
+        size,
+        guest_addr,
+    })
+}
+
+fn map_buffer(control: &File, kind: IoMapKind, size: usize) -> Result<MemoryMapping> {
+    let fd = unsafe { ioctl_with_val(control, SEL4_CREATE_IO_HANDLER(), kind as u64) };
+    if fd < 0 {
+        return Err(Error::CreateIoHandler {
+            kind: kind.into(),
+            source: io::Error::last_os_error(),
+        });
+    }
+
+    let file = unsafe { File::from_raw_fd(fd) };
+    let prot = libc::PROT_READ | libc::PROT_WRITE;
+    let flags = libc::MAP_SHARED;
+
+    MemoryMapping::try_mmap(None, size, prot, flags, Some(&file), None).map_err(|e| {
+        Error::MmapIoHandler {
+            kind: kind.into(),
+            source: e,
+        }
+    })
 }
 
 impl IoInterface for Sel4IoInterface {
