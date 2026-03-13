@@ -5,7 +5,7 @@ use std::sync::Arc;
 use greens_core::io_interface::{InterruptLine, InterruptLineOperation, IoInterface, MsiMessage};
 use greens_pci::device::PciDevice;
 use greens_pci::function::PciFunction;
-use greens_pci::intx::{PciInterruptLine, PciInterruptLineState};
+use greens_pci::intx::{PciInterruptLine, PciInterruptLineConfig, PciInterruptLineState};
 use greens_pci::{PciInterruptController, PciMsiMessage};
 use greens_pci_virtio::pci::VirtioPciFunction;
 use greens_sys_linux::eventfd::EventFdBinder;
@@ -59,9 +59,14 @@ where
     E: EventFdBinder,
 {
     pub(crate) fn new(ic: InterruptController<T>, d: VhostNetDevice<E>) -> Self {
-        let function =
-            VirtioPciFunction::new(Self::pci_device_class(), Self::pci_sub_class(), ic, d)
-                .expect("virtio pci function creation failed!");
+        let function = VirtioPciFunction::new(
+            Self::pci_device_class(),
+            Self::pci_sub_class(),
+            PciInterruptLineConfig::Fixed(0),
+            ic,
+            d,
+        )
+        .expect("virtio pci function creation failed!");
         Self { function }
     }
 

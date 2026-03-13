@@ -71,6 +71,7 @@ where
     pub fn new(
         pci_class_base: u8,
         pci_class_sub: u8,
+        interrupt_line: PciInterruptLineConfig,
         interrupt_controller: C,
         device: D,
     ) -> Result<Self> {
@@ -117,8 +118,7 @@ where
             [PbaEntry::default(); 1],
         )?;
 
-        let intx = PciIntxConfig::new(PciIntxPin::IntA, PciInterruptLineConfig::Fixed(0))
-            .build(&mut config);
+        let intx = PciIntxConfig::new(PciIntxPin::IntA, interrupt_line).build(&mut config);
 
         Ok(Self {
             config,
