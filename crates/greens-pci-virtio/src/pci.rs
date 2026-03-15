@@ -24,7 +24,7 @@ use crate::pci_cfg_cap::{VirtioPciCfg, VirtioPciCfgCap, VirtioPciCfgHandler};
 use crate::pci_common_cfg::{VirtioPciCommonCfg, VirtioPciCommonCfgCap};
 use crate::pci_device_cfg::{VirtioPciDeviceCfg, VirtioPciDeviceCfgCap};
 use crate::pci_isr_cfg::{VirtioPciIsr, VirtioPciIsrCfgCap, VirtioPciIsrState};
-use crate::pci_notify_cfg::{VirtioPciNotifyCfg, VirtioPciNotifyCfgCap, VirtioPciNotifyCfgInfo};
+use crate::pci_notify_cfg::{VirtioPciNotify, VirtioPciNotifyCfg, VirtioPciNotifyCfgCap};
 
 pub const VIRTIO_PCI_VENDOR_ID: u16 = 0x1AF4;
 pub const VIRTIO_PCI_DEVICE_ID_BASE: u16 = 0x1040;
@@ -33,15 +33,11 @@ pub const VIRTIO_PCI_REVISION_ID: u8 = 1;
 type VirtioMsiXTable = [MsiXEntry; 32];
 type VirtioPbaTable = [PbaEntry; 1];
 
-pub trait VirtioPciDevice: VirtioDevice + WithDriverSelect + VirtioPciIsrState {
+pub trait VirtioPciDevice:
+    VirtioDevice + WithDriverSelect + VirtioPciIsrState + VirtioPciNotify
+{
     fn set_config_msix_vector(&mut self, vector: u16);
     fn config_msix_vector(&self) -> u16;
-
-    /// Sets the queue notification configuration information for the device.
-    ///
-    /// The method is called when the guest maps the notification BAR.
-    fn set_notification_info(&mut self, notify_cfg_info: VirtioPciNotifyCfgInfo);
-    fn queue_notify(&mut self, data: u32);
 
     fn set_msi_message(&mut self, vector: u16, msg: PciMsiMessage);
 
@@ -54,11 +50,11 @@ pub struct VirtioPciFunction<
     D: VirtioPciDevice<E = greens_pci::Error, Q = Queue>,
 > {
     config: PciConfigurationSpace,
-    common_cfg: VirtioPciCommonCfg,
-    device_cfg: VirtioPciDeviceCfg,
+    common_cfg: VirtioPciCommonCfg<D>,
+    device_cfg: VirtioPciDeviceCfg<D>,
     isr_cfg: VirtioPciIsr<D>,
     pci_cfg: VirtioPciCfg,
-    notify_cfg: VirtioPciNotifyCfg,
+    notify_cfg: VirtioPciNotifyCfg<D>,
     interrupt_controller: C,
     msix: PciMsiX<VirtioMsiXTable, VirtioPbaTable>,
     intx: PciIntx,
@@ -95,7 +91,7 @@ where
         );
         config.add_bar(config_bar)?;
 
-        let common_cfg_size = VirtioPciCommonCfg::size() as u32;
+        let common_cfg_size = VirtioPciCommonCfg::<D>::size() as u32;
 
         config.add_capability(&VirtioPciCommonCfgCap::new(0, 0x0000, common_cfg_size))?;
         config.add_capability(&VirtioPciIsrCfgCap::new(0, 0x1000, 1))?;
@@ -155,25 +151,21 @@ where
 
     fn device_write_config(&mut self, offset: usize, data: &[u8]) -> Result<()> {
         self.config.write_checked(offset, data)?;
-        let mut device: &mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue> =
-            &mut self.device;
+
         self.notify_cfg.postprocess_write_config(
             &mut self.config,
             offset,
             data.len(),
-            &mut device,
+            &mut self.device,
         )?;
         self.pci_cfg_cap().process_write(self, offset, data.len());
         Ok(())
     }
 
     fn device_read_bar(&mut self, bar: PciBarIndex, offset: u64, data: &mut [u8]) -> Result<()> {
-        let mut device: &mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue> =
-            &mut self.device;
-
         if self
             .common_cfg
-            .handle_read_bar(bar, offset, data, &mut device)?
+            .handle_read_bar(bar, offset, data, &mut self.device)?
             .handled()
         {
             return Ok(());
@@ -181,7 +173,7 @@ where
 
         if self
             .device_cfg
-            .handle_read_bar(bar, offset, data, &mut device)?
+            .handle_read_bar(bar, offset, data, &mut self.device)?
             .handled()
         {
             return Ok(());
@@ -189,7 +181,7 @@ where
 
         if self
             .notify_cfg
-            .handle_read_bar(bar, offset, data, &mut device)?
+            .handle_read_bar(bar, offset, data, &mut self.device)?
             .handled()
         {
             return Ok(());
@@ -214,12 +206,9 @@ where
     }
 
     fn device_write_bar(&mut self, bar: PciBarIndex, offset: u64, data: &[u8]) -> Result<()> {
-        let mut device: &mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue> =
-            &mut self.device;
-
         if self
             .common_cfg
-            .handle_write_bar(bar, offset, data, &mut device)?
+            .handle_write_bar(bar, offset, data, &mut self.device)?
             .handled()
         {
             return Ok(());
@@ -227,7 +216,7 @@ where
 
         if self
             .device_cfg
-            .handle_write_bar(bar, offset, data, &mut device)?
+            .handle_write_bar(bar, offset, data, &mut self.device)?
             .handled()
         {
             return Ok(());
@@ -235,7 +224,7 @@ where
 
         if self
             .notify_cfg
-            .handle_write_bar(bar, offset, data, &mut device)?
+            .handle_write_bar(bar, offset, data, &mut self.device)?
             .handled()
         {
             return Ok(());

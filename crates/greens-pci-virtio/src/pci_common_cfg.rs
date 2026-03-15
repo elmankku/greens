@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Markku Ahvenjärvi
 use greens_pci::bar::PciBarIndex;
@@ -7,7 +9,7 @@ use greens_pci::utils::{
     EndianSwapSize, from_little_endian, read, set, set_byte, set_word, to_little_endian, write,
 };
 use greens_pci::{Error, Result};
-use virtio_queue::{Queue, QueueT};
+use virtio_queue::QueueT;
 
 use crate::pci::VirtioPciDevice;
 use crate::pci_cap::{VirtioPciCap, VirtioPciCapType};
@@ -77,14 +79,18 @@ const VIRTIO_COMMON_CFG_SIZE: usize = 64;
 pub const MSIX_VECTOR_UNMAPPED: u16 = 0xFFFF;
 
 #[derive(Debug, Clone)]
-pub struct VirtioPciCommonCfg {
+pub struct VirtioPciCommonCfg<T> {
     info: PciBarRegionInfo,
     registers: [u8; VIRTIO_COMMON_CFG_SIZE],
     writable_bits: [u8; VIRTIO_COMMON_CFG_SIZE],
+    phantom: PhantomData<T>,
 }
 
-impl PciBarRegionHandler for VirtioPciCommonCfg {
-    type Context<'a> = &'a mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue>;
+impl<T> PciBarRegionHandler for VirtioPciCommonCfg<T>
+where
+    T: VirtioPciDevice,
+{
+    type Context<'a> = T;
     type R = ();
 
     fn read_bar(
@@ -93,7 +99,7 @@ impl PciBarRegionHandler for VirtioPciCommonCfg {
         data: &mut [u8],
         context: &mut Self::Context<'_>,
     ) -> Result<Self::R> {
-        self.prepare_read(offset, data.len(), *context)?;
+        self.prepare_read(offset, data.len(), context)?;
         self.read_registers(offset, data)?;
         to_little_endian(data, EndianSwapSize::Qword)
     }
@@ -118,17 +124,23 @@ impl PciBarRegionHandler for VirtioPciCommonCfg {
             _ => Err(e),
         })?;
 
-        self.process_write(offset, size, *context)
+        self.process_write(offset, size, context)
     }
 }
 
-impl PciBarRegion for VirtioPciCommonCfg {
+impl<T> PciBarRegion for VirtioPciCommonCfg<T>
+where
+    T: VirtioPciDevice,
+{
     fn info(&self) -> &PciBarRegionInfo {
         &self.info
     }
 }
 
-impl VirtioPciCommonCfg {
+impl<T> VirtioPciCommonCfg<T>
+where
+    T: VirtioPciDevice,
+{
     pub fn new(bar: PciBarIndex, offset: u64, length: u64) -> Self {
         let mut writable_bits = [0x00u8; VIRTIO_COMMON_CFG_SIZE];
 
@@ -145,6 +157,7 @@ impl VirtioPciCommonCfg {
             info: PciBarRegionInfo::new(bar, offset, length),
             registers: [0x00u8; VIRTIO_COMMON_CFG_SIZE],
             writable_bits,
+            phantom: PhantomData,
         }
     }
 
@@ -161,12 +174,7 @@ impl VirtioPciCommonCfg {
         )
     }
 
-    fn prepare_read(
-        &mut self,
-        offset: u64,
-        size: usize,
-        device: &mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue>,
-    ) -> Result<()> {
+    fn prepare_read(&mut self, offset: u64, size: usize, device: &mut T) -> Result<()> {
         let offset = offset as usize;
         let Ok(offset) = Config::try_from(offset) else {
             // Invalid offset, set invalidate data
@@ -232,12 +240,7 @@ impl VirtioPciCommonCfg {
         Ok(())
     }
 
-    fn process_write(
-        &mut self,
-        offset: u64,
-        size: usize,
-        device: &mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue>,
-    ) -> Result<()> {
+    fn process_write(&mut self, offset: u64, size: usize, device: &mut T) -> Result<()> {
         let offset = offset as usize;
         let Ok(offset) = Config::try_from(offset) else {
             // Invalid offset, set invalidate data
@@ -384,23 +387,16 @@ impl VirtioPciCommonCfg {
         }
     }
 
-    fn with_queue<U, F>(
-        &self,
-        device: &mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue>,
-        f: F,
-    ) -> Option<U>
+    fn with_queue<U, F>(&self, device: &mut T, f: F) -> Option<U>
     where
-        F: FnOnce(&Queue) -> U,
+        F: FnOnce(&T::Q) -> U,
     {
         device.queue(device.queue_select()).map(f)
     }
 
-    fn with_queue_mut<F>(
-        &mut self,
-        device: &mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue>,
-        f: F,
-    ) where
-        F: FnOnce(&mut Queue),
+    fn with_queue_mut<F>(&mut self, device: &mut T, f: F)
+    where
+        F: FnOnce(&mut T::Q),
     {
         if let Some(queue) = device.queue_mut(self.config_word(Config::QueueSel)) {
             f(queue)
@@ -520,11 +516,13 @@ pub mod tests {
     use greens_pci::PciMsiMessage;
     use greens_pci::configuration_space::PciConfigurationSpace;
     use virtio_device::{VirtioConfig, VirtioDeviceActions, VirtioDeviceType, WithDriverSelect};
+    use virtio_queue::Queue;
 
     use super::*;
     use crate::pci_cap::VIRTIO_CAP_SIZE;
     use crate::pci_cap::tests::{check_cap, check_cap_offs_len};
     use crate::pci_isr_cfg::VirtioPciIsrState;
+    use crate::pci_notify_cfg::VirtioPciNotify;
 
     #[test]
     fn test_common_cfg_cap() {
@@ -573,6 +571,19 @@ pub mod tests {
         pub queue_msix_vector: Vec<u16>,
     }
 
+    impl VirtioPciNotify for TestDevice {
+        fn set_notification_info(
+            &mut self,
+            _notify_cfg_info: crate::pci_notify_cfg::VirtioPciNotifyCfgInfo,
+        ) {
+            todo!()
+        }
+
+        fn queue_notify(&mut self, _data: u32) {
+            todo!()
+        }
+    }
+
     impl VirtioPciDevice for TestDevice {
         fn set_config_msix_vector(&mut self, vector: u16) {
             self.config_msix_vector = vector;
@@ -594,18 +605,7 @@ pub mod tests {
             self.queue_msix_vector.get(index).cloned()
         }
 
-        fn set_notification_info(
-            &mut self,
-            _notify_cfg_info: crate::pci_notify_cfg::VirtioPciNotifyCfgInfo,
-        ) {
-            todo!()
-        }
-
         fn set_msi_message(&mut self, _vector: u16, _msg: PciMsiMessage) {
-            todo!()
-        }
-
-        fn queue_notify(&mut self, _data: u32) {
             todo!()
         }
     }
@@ -662,17 +662,23 @@ pub mod tests {
         }
     }
 
-    fn cfg_w(cfgdev: &mut (VirtioPciCommonCfg, TestDevice), offset: Config, data: &[u8]) {
+    fn cfg_w(
+        cfgdev: &mut (VirtioPciCommonCfg<TestDevice>, TestDevice),
+        offset: Config,
+        data: &[u8],
+    ) {
         let (cfg, dev) = cfgdev;
-        let mut dev: &mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue> = dev;
-        cfg.write_bar(offset.value() as u64, &data, &mut dev)
+        cfg.write_bar(offset.value() as u64, &data, dev)
             .expect("write")
     }
 
-    fn cfg_r(cfgdev: &mut (VirtioPciCommonCfg, TestDevice), offset: Config, data: &mut [u8]) {
+    fn cfg_r(
+        cfgdev: &mut (VirtioPciCommonCfg<TestDevice>, TestDevice),
+        offset: Config,
+        data: &mut [u8],
+    ) {
         let (cfg, dev) = cfgdev;
-        let mut dev: &mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue> = dev;
-        cfg.read_bar(offset.value() as u64, data, &mut dev)
+        cfg.read_bar(offset.value() as u64, data, dev)
             .expect("read")
     }
 
@@ -680,7 +686,11 @@ pub mod tests {
     #[test]
     fn test_device_features() {
         let mut cfgdev = (
-            VirtioPciCommonCfg::new(PciBarIndex::default(), 0, VirtioPciCommonCfg::size() as u64),
+            VirtioPciCommonCfg::new(
+                PciBarIndex::default(),
+                0,
+                VirtioPciCommonCfg::<TestDevice>::size() as u64,
+            ),
             TestDevice::new(),
         );
 

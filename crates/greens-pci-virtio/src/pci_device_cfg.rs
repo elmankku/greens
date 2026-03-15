@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Markku Ahvenjärvi
+use std::marker::PhantomData;
+
 use greens_pci::Result;
 use greens_pci::bar::PciBarIndex;
 use greens_pci::bar_region::{PciBarRegion, PciBarRegionHandler, PciBarRegionInfo};
 use greens_pci::capability::{PciCapability, PciCapabilityId};
-use virtio_queue::Queue;
 
 use crate::pci::VirtioPciDevice;
 use crate::pci_cap::{VirtioPciCap, VirtioPciCapType};
@@ -43,26 +44,37 @@ impl PciCapability for VirtioPciDeviceCfgCap {
 }
 
 #[derive(Debug, Clone)]
-pub struct VirtioPciDeviceCfg {
+pub struct VirtioPciDeviceCfg<T> {
     info: PciBarRegionInfo,
+    phantom: PhantomData<T>,
 }
 
-impl VirtioPciDeviceCfg {
+impl<T> VirtioPciDeviceCfg<T>
+where
+    T: VirtioPciDevice,
+{
     pub fn new(bar: PciBarIndex, offset: u64, length: u64) -> Self {
         Self {
             info: PciBarRegionInfo::new(bar, offset, length),
+            phantom: PhantomData,
         }
     }
 }
 
-impl PciBarRegion for VirtioPciDeviceCfg {
+impl<T> PciBarRegion for VirtioPciDeviceCfg<T>
+where
+    T: VirtioPciDevice,
+{
     fn info(&self) -> &PciBarRegionInfo {
         &self.info
     }
 }
 
-impl PciBarRegionHandler for VirtioPciDeviceCfg {
-    type Context<'a> = &'a mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue>;
+impl<T> PciBarRegionHandler for VirtioPciDeviceCfg<T>
+where
+    T: VirtioPciDevice,
+{
+    type Context<'a> = T;
     type R = ();
 
     fn read_bar(
@@ -116,19 +128,21 @@ pub mod tests {
         check_cap_ro_fields(&mut config, &[0x00u8; VIRTIO_CAP_SIZE])
     }
 
-    fn read(cfgdev: &mut (VirtioPciDeviceCfg, TestDevice), offset: u64, data: &mut [u8]) {
+    fn read(
+        cfgdev: &mut (VirtioPciDeviceCfg<TestDevice>, TestDevice),
+        offset: u64,
+        data: &mut [u8],
+    ) {
         let (cfg, dev) = cfgdev;
-        let mut dev: &mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue> = dev;
-        cfg.read_bar(offset, data, &mut dev).expect("read")
+        cfg.read_bar(offset, data, dev).expect("read")
     }
 
-    fn write(cfgdev: &mut (VirtioPciDeviceCfg, TestDevice), offset: u64, data: &[u8]) {
+    fn write(cfgdev: &mut (VirtioPciDeviceCfg<TestDevice>, TestDevice), offset: u64, data: &[u8]) {
         let (cfg, dev) = cfgdev;
-        let mut dev: &mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue> = dev;
-        cfg.write_bar(offset, &data, &mut dev).expect("write")
+        cfg.write_bar(offset, data, dev).expect("write")
     }
 
-    fn test_dev() -> (VirtioPciDeviceCfg, TestDevice) {
+    fn test_dev() -> (VirtioPciDeviceCfg<TestDevice>, TestDevice) {
         let dev = TestDevice::new();
         let size = dev.cfg.config_space.len() as u64;
 

@@ -1,5 +1,8 @@
+use std::marker::PhantomData;
+
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Markku Ahvenjärvi
+use greens_pci::Result;
 use greens_pci::bar::PciBarIndex;
 use greens_pci::bar_region::{PciBarRegion, PciBarRegionHandler, PciBarRegionInfo};
 use greens_pci::capability::{PciCapOffset, PciCapability, PciCapabilityId};
@@ -7,10 +10,7 @@ use greens_pci::config_handler::PciConfigurationSpaceIoHandler;
 use greens_pci::function::PciHandlerResult;
 use greens_pci::registers::PCI_BAR0;
 use greens_pci::utils::register_block::set_dword;
-use greens_pci::{Error, Result};
-use virtio_queue::Queue;
 
-use crate::pci::VirtioPciDevice;
 use crate::pci_cap::{VIRTIO_CAP_SIZE, VirtioPciCap, VirtioPciCapType, virtio_cap_len};
 
 pub(crate) const REG_NOTIFY_OFF_MULTIPLIER: usize = 14;
@@ -63,14 +63,33 @@ impl PciCapability for VirtioPciNotifyCfgCap {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct VirtioPciNotifyCfg {
-    cap_offset: PciCapOffset,
-    info: PciBarRegionInfo,
+/// Notification interface for VirtIO PCI devices.
+///
+/// Implemented by devices that are managed by [`VirtioPciNotifyCfg`], which handles
+/// the VirtIO notification capability (type `0x02`) in the PCI capability list.
+pub trait VirtioPciNotify {
+    /// Called when the guest maps the notification BAR, providing the addresses
+    /// the device needs to set up per-queue notification targets.
+    fn set_notification_info(&mut self, notify_cfg_info: VirtioPciNotifyCfgInfo);
+
+    /// Called when the guest writes to the notification BAR to notify a queue.
+    ///
+    /// `data` is the raw 32-bit value written by the guest, typically the queue index.
+    fn queue_notify(&mut self, data: u32);
 }
 
-impl PciBarRegionHandler for VirtioPciNotifyCfg {
-    type Context<'a> = &'a mut dyn VirtioPciDevice<E = greens_pci::Error, Q = Queue>;
+#[derive(Debug, Clone)]
+pub struct VirtioPciNotifyCfg<T> {
+    cap_offset: PciCapOffset,
+    info: PciBarRegionInfo,
+    phantom: PhantomData<T>,
+}
+
+impl<T> PciBarRegionHandler for VirtioPciNotifyCfg<T>
+where
+    T: VirtioPciNotify,
+{
+    type Context<'a> = T;
     type R = ();
 
     fn read_bar(
@@ -104,14 +123,20 @@ impl PciBarRegionHandler for VirtioPciNotifyCfg {
     }
 }
 
-impl PciBarRegion for VirtioPciNotifyCfg {
+impl<T> PciBarRegion for VirtioPciNotifyCfg<T>
+where
+    T: VirtioPciNotify,
+{
     fn info(&self) -> &PciBarRegionInfo {
         &self.info
     }
 }
 
-impl PciConfigurationSpaceIoHandler for VirtioPciNotifyCfg {
-    type Context<'a> = &'a mut dyn VirtioPciDevice<E = Error, Q = Queue>;
+impl<T> PciConfigurationSpaceIoHandler for VirtioPciNotifyCfg<T>
+where
+    T: VirtioPciNotify,
+{
+    type Context<'a> = T;
     type R = ();
 
     fn postprocess_write_config(
@@ -136,11 +161,15 @@ impl PciConfigurationSpaceIoHandler for VirtioPciNotifyCfg {
     }
 }
 
-impl VirtioPciNotifyCfg {
+impl<T> VirtioPciNotifyCfg<T>
+where
+    T: VirtioPciNotify,
+{
     pub fn new(cap_offset: PciCapOffset, bar: PciBarIndex, offset: u64, length: u64) -> Self {
         Self {
             cap_offset,
             info: PciBarRegionInfo::new(bar, offset, length),
+            phantom: PhantomData,
         }
     }
 

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Markku Ahvenjärvi
-use std::borrow::Borrow;
-use std::borrow::BorrowMut;
+use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
@@ -11,40 +10,27 @@ use greens_pci::PciMsiMessage;
 use greens_pci_virtio::pci::VirtioPciDevice;
 use greens_pci_virtio::pci_common_cfg::MSIX_VECTOR_UNMAPPED;
 use greens_pci_virtio::pci_isr_cfg::VirtioPciIsrState;
-use greens_pci_virtio::pci_notify_cfg::VirtioPciNotifyCfgInfo;
-use greens_sys_linux::eventfd::EventFdBinder;
-use greens_sys_linux::eventfd::IoEventFdConfig;
-use greens_sys_linux::eventfd::IrqFdConfig;
-use vhost::VhostBackend;
-use vhost::VhostUserMemoryRegionInfo;
-use vhost::VringConfigData;
+use greens_pci_virtio::pci_notify_cfg::{VirtioPciNotify, VirtioPciNotifyCfgInfo};
+use greens_sys_linux::eventfd::{EventFdBinder, IoEventFdConfig, IrqFdConfig};
 use vhost::net::VhostNet;
 use vhost::vhost_kern::VhostKernBackend;
 use vhost::vhost_kern::net::Net;
-use virtio_bindings::virtio_config::VIRTIO_F_ACCESS_PLATFORM;
-use virtio_bindings::virtio_config::VIRTIO_F_NOTIFICATION_DATA;
-use virtio_bindings::virtio_config::VIRTIO_F_RING_RESET;
+use vhost::{VhostBackend, VhostUserMemoryRegionInfo, VringConfigData};
+use virtio_bindings::virtio_config::{
+    VIRTIO_F_ACCESS_PLATFORM, VIRTIO_F_NOTIFICATION_DATA, VIRTIO_F_RING_RESET,
+};
 use virtio_bindings::virtio_ids;
-use virtio_bindings::virtio_net::VIRTIO_NET_F_CSUM;
-use virtio_bindings::virtio_net::VIRTIO_NET_F_GUEST_CSUM;
-use virtio_bindings::virtio_net::VIRTIO_NET_F_GUEST_TSO4;
-use virtio_bindings::virtio_net::VIRTIO_NET_F_GUEST_TSO6;
-use virtio_bindings::virtio_net::VIRTIO_NET_F_GUEST_UFO;
-use virtio_bindings::virtio_net::VIRTIO_NET_F_HOST_TSO4;
-use virtio_bindings::virtio_net::VIRTIO_NET_F_HOST_TSO6;
-use virtio_bindings::virtio_net::VIRTIO_NET_F_HOST_UFO;
-use virtio_bindings::virtio_net::VIRTIO_NET_F_MAC;
-use virtio_device::VirtioDevice;
-use virtio_device::WithDriverSelect;
-use virtio_device::{VirtioConfig, VirtioDeviceActions, VirtioDeviceType};
+use virtio_bindings::virtio_net::{
+    VIRTIO_NET_F_CSUM, VIRTIO_NET_F_GUEST_CSUM, VIRTIO_NET_F_GUEST_TSO4, VIRTIO_NET_F_GUEST_TSO6,
+    VIRTIO_NET_F_GUEST_UFO, VIRTIO_NET_F_HOST_TSO4, VIRTIO_NET_F_HOST_TSO6, VIRTIO_NET_F_HOST_UFO,
+    VIRTIO_NET_F_MAC,
+};
+use virtio_device::{
+    VirtioConfig, VirtioDevice, VirtioDeviceActions, VirtioDeviceType, WithDriverSelect,
+};
 use virtio_queue::{Queue, QueueT};
-use vm_memory::Address;
-use vm_memory::GuestAddressSpace;
-use vm_memory::GuestMemory;
-use vm_memory::GuestMemoryMmap;
-use vm_memory::GuestMemoryRegion;
-use vmm_sys_util::eventfd::EFD_NONBLOCK;
-use vmm_sys_util::eventfd::EventFd;
+use vm_memory::{Address, GuestAddressSpace, GuestMemory, GuestMemoryMmap, GuestMemoryRegion};
+use vmm_sys_util::eventfd::{EFD_NONBLOCK, EventFd};
 
 use crate::tap::Tap;
 
@@ -73,18 +59,10 @@ pub(crate) struct VhostNetConfig {
     pub queue_size: u16,
 }
 
-impl<T> VirtioPciDevice for VhostNetDevice<T>
+impl<T> VirtioPciNotify for VhostNetDevice<T>
 where
     T: EventFdBinder,
 {
-    fn set_config_msix_vector(&mut self, vector: u16) {
-        self.config_msix_vector = vector;
-    }
-
-    fn config_msix_vector(&self) -> u16 {
-        self.config_msix_vector
-    }
-
     fn set_notification_info(&mut self, notify_cfg_info: VirtioPciNotifyCfgInfo) {
         self.notify_cfg_info = Some(notify_cfg_info)
     }
@@ -95,6 +73,19 @@ where
             // FIXME: error... what to do?
             eventfd.write(1).unwrap();
         }
+    }
+}
+
+impl<T> VirtioPciDevice for VhostNetDevice<T>
+where
+    T: EventFdBinder,
+{
+    fn set_config_msix_vector(&mut self, vector: u16) {
+        self.config_msix_vector = vector;
+    }
+
+    fn config_msix_vector(&self) -> u16 {
+        self.config_msix_vector
     }
 
     fn set_msi_message(&mut self, vector: u16, msg: PciMsiMessage) {
