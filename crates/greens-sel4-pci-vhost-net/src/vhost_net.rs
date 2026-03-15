@@ -114,7 +114,7 @@ where
     }
 }
 
-fn feature_mask(bits: Vec<u32>) -> u64 {
+fn feature_mask(bits: &[u32]) -> u64 {
     bits.iter().fold(0, |mask, bit| mask | (1 << bit))
 }
 
@@ -122,11 +122,11 @@ fn feature_mask(bits: Vec<u32>) -> u64 {
 fn transport_features() -> u64 {
     // VIRTIO_F_ACCESS_PLATFORM is advertised for the guest but not for the backend, because
     // that enables iotlb. That will fail unless properly handled.
-    feature_mask(vec![VIRTIO_F_ACCESS_PLATFORM])
+    feature_mask(&[VIRTIO_F_ACCESS_PLATFORM])
 }
 
 fn supported_device_features() -> u64 {
-    let features = vec![
+    let features = [
         VIRTIO_NET_F_CSUM,
         VIRTIO_NET_F_GUEST_CSUM,
         VIRTIO_NET_F_GUEST_TSO4,
@@ -138,7 +138,7 @@ fn supported_device_features() -> u64 {
         VIRTIO_NET_F_MAC,
     ];
 
-    feature_mask(features)
+    feature_mask(&features)
 }
 
 fn device_features(config: &VhostNetConfig) -> u64 {
@@ -164,7 +164,7 @@ where
 
         net.set_owner().expect("set owner");
 
-        let disabled_features = !feature_mask(vec![VHOST_F_LOG_ALL, VIRTIO_F_RING_RESET]);
+        let disabled_features = !feature_mask(&[VHOST_F_LOG_ALL, VIRTIO_F_RING_RESET]);
         let backend_features = net.get_features().unwrap();
         let device_features = device_features(&config);
 
