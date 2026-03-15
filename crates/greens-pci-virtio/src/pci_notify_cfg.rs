@@ -147,7 +147,7 @@ impl VirtioPciNotifyCfg {
     pub fn targets_bar_cfg(&self, offset: usize, size: usize) -> bool {
         let bar_offset = PCI_BAR0 + (self.info.bar.into_inner() * 4);
 
-        bar_offset >= offset && bar_offset < bar_offset + size
+        bar_offset >= offset && bar_offset < offset + size
     }
 }
 
@@ -155,6 +155,7 @@ impl VirtioPciNotifyCfg {
 /// region.
 ///
 /// Using the information the VirtIO device can determine the queue notification addresses.
+#[derive(Debug)]
 pub struct VirtioPciNotifyCfgInfo {
     /// The Guest Physical Address (GPA) pointing to the beginning of the notification BAR region.
     pub bar_gpa: u64,
@@ -185,9 +186,8 @@ impl VirtioPciNotifyCfgInfo {
 pub mod tests {
     use greens_pci::configuration_space::PciConfigurationSpace;
 
-    use crate::pci_cap::tests::{check_cap, check_cap_offs_len, check_cap_ro_fields};
-
     use super::*;
+    use crate::pci_cap::tests::{check_cap, check_cap_offs_len, check_cap_ro_fields};
 
     fn check_notify_multiplier(config: &mut PciConfigurationSpace, val: u32) {
         let (_, cap_offset) = config.capability_iter().last().unwrap();
