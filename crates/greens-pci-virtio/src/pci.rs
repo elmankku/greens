@@ -11,7 +11,9 @@ use greens_pci::function::{
 use greens_pci::interrupt::PciInterruptType::{Intx, MsiX, NoInterrupt};
 use greens_pci::interrupt::{PciInterruptSignaler, handle_intx, handle_msi};
 use greens_pci::intx;
-use greens_pci::intx::{PciInterruptLineConfig, PciIntx, PciIntxConfig, PciIntxPin};
+use greens_pci::intx::{
+    PciInterruptLineConfig, PciInterruptLineState, PciIntx, PciIntxConfig, PciIntxPin,
+};
 use greens_pci::msi::PciMsiMessageSource;
 use greens_pci::msix::{MsiXBarHandlerContext, MsiXEntry, PbaEntry, PciMsiX, PciMsiXConfig};
 use greens_pci::{PciInterruptController, PciMsiMessage, Result};
@@ -198,6 +200,13 @@ where
             .handle_read_bar(bar, offset, data, &mut self.device)?
             .handled()
         {
+            // Virtio spec: reading the ISR register acknowledges the interrupt.
+            intx::signal_intx(
+                &mut self.config,
+                &mut self.interrupt_controller,
+                &self.intx,
+                PciInterruptLineState::Low,
+            );
             return Ok(());
         }
 
