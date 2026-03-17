@@ -346,7 +346,7 @@ fn enabled_vectors(control: u16) -> MsiMultipleMessage {
     MsiMultipleMessage::from_enable(control).unwrap_or(MsiMultipleMessage::One)
 }
 
-pub struct PciMsi<T: PciInterruptController> {
+pub struct PciMsi<T> {
     pub offset: PciCapOffset,
     phantom: PhantomData<T>,
 }
@@ -534,7 +534,7 @@ where
         }
 
         if evaluate_interrupts {
-            evaluate_pending_interrupts(config, self, context);
+            evaluate_pending_interrupts(config, self.offset, self, context);
         }
 
         // Message address
@@ -565,15 +565,15 @@ where
     }
 }
 
-fn next_pending_vector<T: PciInterruptController>(
+fn next_pending_vector(
     config: &PciConfigurationSpace,
-    msi: &PciMsi<T>,
+    msi_offset: PciCapOffset,
     since: PciMsiVector,
 ) -> Option<PciMsiVector> {
-    let control = config.read_word(msi.offset);
+    let control = config.read_word(msi_offset);
     let offset = pending_bits_offset(control)?;
 
-    let mut pending = config.read_dword(msi.offset + offset);
+    let mut pending = config.read_dword(msi_offset + offset);
     pending &= !1u32
         .checked_shl(since as u32)
         .unwrap_or(0)
@@ -591,13 +591,14 @@ fn next_pending_vector<T: PciInterruptController>(
     }
 }
 
-fn evaluate_pending_interrupts<T: PciInterruptController>(
+fn evaluate_pending_interrupts<C: PciInterruptController>(
     config: &mut PciConfigurationSpace,
-    msi: &mut PciMsi<T>,
-    interrupt_controller: &mut T,
+    msi_offset: PciCapOffset,
+    msi: &mut impl PciMsiMessageSource,
+    interrupt_controller: &mut C,
 ) {
     let mut start = 0;
-    while let Some(vector) = next_pending_vector(config, msi, start) {
+    while let Some(vector) = next_pending_vector(config, msi_offset, start) {
         if let Ok(PciMsiGenerationResult::Generated(message)) =
             msi.try_generate_message(config, vector)
         {

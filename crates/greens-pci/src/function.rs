@@ -2,17 +2,41 @@
 // Copyright (c) 2025 Markku Ahvenjärvi
 use crate::bar::{PciBar, PciBarIndex};
 use crate::configuration_space::PciConfigurationSpace;
-use crate::interrupt::PciInterruptSignaler;
+use crate::interrupt::{PciInterrupt, PciInterruptHandler, PciInterruptType};
 use crate::registers::{
     NUM_BAR_REGS, PCI_CACHE_LINE_SIZE, PCI_CLASS_CODE_BASE, PCI_CLASS_CODE_PI, PCI_CLASS_CODE_SUB,
     PCI_DEVICE_ID, PCI_HEADER_TYPE, PCI_HEADER_TYPE_MULTIFUNCTION, PCI_REVISION_ID,
     PCI_SUBSYSTEM_ID, PCI_SUBSYSTEM_VENDOR_ID, PCI_VENDOR_ID,
 };
 use crate::utils::range_contains;
-use crate::{Error, PciMsiMessage, Result};
+use crate::{Error, PciInterruptController, PciMsiMessage, Result};
 
 pub type PciMmioBarOffset = u64;
 pub type PciIoBarOffset = u16;
+
+/// Provides the device handler with interrupt context during BAR accesses:
+/// the currently active interrupt type, and the ability to signal an interrupt.
+pub struct PciInterruptAccess<'a> {
+    active: PciInterruptType,
+    signal: &'a mut dyn FnMut(&mut PciConfigurationSpace, PciInterrupt) -> Result<()>,
+}
+
+impl<'a> PciInterruptAccess<'a> {
+    fn new(
+        active: PciInterruptType,
+        signal: &'a mut dyn FnMut(&mut PciConfigurationSpace, PciInterrupt) -> Result<()>,
+    ) -> Self {
+        Self { active, signal }
+    }
+
+    pub fn active(&self) -> PciInterruptType {
+        self.active
+    }
+
+    pub fn signal(&mut self, config: &mut PciConfigurationSpace, irq: PciInterrupt) -> Result<()> {
+        (self.signal)(config, irq)
+    }
+}
 
 pub trait PciFunction {
     fn read_config(&mut self, offset: usize, data: &mut [u8]) -> Result<()>;
@@ -94,89 +118,221 @@ pub enum PciConfigurationUpdate {
     MsiXMessage(usize, PciMsiMessage),
 }
 
-pub trait PciInterruptConfigHandler: PciInterruptSignaler + PciFunctionConfigAccessor {
-    fn device_read_config(&mut self, offset: usize, data: &mut [u8]) -> Result<()>;
-    fn device_write_config(&mut self, offset: usize, data: &[u8]) -> Result<()>;
-    fn device_read_bar(&mut self, bar: PciBarIndex, offset: u64, data: &mut [u8]) -> Result<()>;
-    fn device_write_bar(&mut self, bar: PciBarIndex, offset: u64, data: &[u8]) -> Result<()>;
-
-    fn read_config(&mut self, offset: usize, data: &mut [u8]) -> Result<()> {
-        self.preprocess_read_config(offset, data.len())?;
-        self.device_read_config(offset, data)
-    }
-
-    fn write_config(&mut self, offset: usize, data: &[u8]) -> Result<()> {
-        self.device_write_config(offset, data)?;
-        if let PciHandlerResult::Handled(Some(r)) =
-            self.postprocess_write_config(offset, data.len())?
-        {
-            self.on_interrupt_config_update(r);
-        }
-        Ok(())
-    }
-
-    fn read_bar(&mut self, bar: PciBarIndex, offset: u64, data: &mut [u8]) -> Result<()> {
-        if let PciHandlerResult::Handled(_) = self.handle_read_bar(bar, offset, data)? {
-            return Ok(());
-        }
-
-        self.device_read_bar(bar, offset, data)
-    }
-
-    fn write_bar(&mut self, bar: PciBarIndex, offset: u64, data: &[u8]) -> Result<()> {
-        if let PciHandlerResult::Handled(Some(r)) = self.handle_write_bar(bar, offset, data)? {
-            self.on_interrupt_config_update(r);
-            return Ok(());
-        }
-
-        self.device_write_bar(bar, offset, data)
-    }
-
-    fn on_interrupt_config_update(&mut self, event: PciConfigurationUpdate) {
-        let _ = event;
-    }
-}
-
 pub trait PciFunctionConfigAccessor {
     fn config(&self) -> &PciConfigurationSpace;
     fn config_mut(&mut self) -> &mut PciConfigurationSpace;
 }
 
-pub trait PciFunctionWithInterrupts: PciInterruptConfigHandler + PciFunctionConfigAccessor {}
+/// Trait for the device-specific side of a PCI function. The device owns the
+/// `PciConfigurationSpace` (via [`PciFunctionConfigAccessor`]) and is responsible
+/// for all BAR dispatch. [`PciFunctionWithInterrupts`] owns the interrupt mechanism
+/// and controller, composing them with the device.
+pub trait PciDeviceHandler: PciFunctionConfigAccessor {
+    /// Called after a config space write for device-specific post-processing.
+    fn postprocess_write_config(&mut self, offset: usize, size: usize) -> Result<()> {
+        let _ = (offset, size);
+        Ok(())
+    }
 
-// FIXME: Event should cover intx, msi and msix
-impl<T> PciFunction for T
+    /// Called before a config space read for device-specific pre-processing.
+    fn preprocess_read_config(&mut self, offset: usize, size: usize) {
+        let _ = (offset, size);
+    }
+
+    fn read_bar(
+        &mut self,
+        bar: PciBarIndex,
+        offset: u64,
+        data: &mut [u8],
+        irq: &mut PciInterruptAccess<'_>,
+    ) -> Result<()> {
+        let _ = (bar, offset, data, irq);
+        Err(Error::NotSupported)
+    }
+
+    fn write_bar(
+        &mut self,
+        bar: PciBarIndex,
+        offset: u64,
+        data: &[u8],
+        irq: &mut PciInterruptAccess<'_>,
+    ) -> Result<()> {
+        let _ = (bar, offset, data, irq);
+        Err(Error::NotSupported)
+    }
+
+    /// Called when the interrupt mechanism reports a configuration update
+    /// (e.g. an MSI message address or data change that the device must track).
+    fn on_interrupt_config_update(&mut self, event: PciConfigurationUpdate) {
+        let _ = event;
+    }
+}
+
+/// Concrete wrapper that composes a device handler `D` (which owns the config
+/// space) with an interrupt mechanism `I` and interrupt controller `C`.
+pub struct PciFunctionWithInterrupts<C, D, I>
 where
-    T: PciFunctionWithInterrupts,
+    C: PciInterruptController,
+    I: PciInterruptHandler<C>,
+{
+    controller: C,
+    device: D,
+    interrupt: I,
+}
+
+impl<C, D, I> PciFunctionWithInterrupts<C, D, I>
+where
+    C: PciInterruptController,
+    I: PciInterruptHandler<C>,
+{
+    pub fn new(controller: C, device: D, interrupt: I) -> Self {
+        Self {
+            controller,
+            device,
+            interrupt,
+        }
+    }
+
+    pub fn device(&self) -> &D {
+        &self.device
+    }
+
+    pub fn device_mut(&mut self) -> &mut D {
+        &mut self.device
+    }
+
+    pub fn controller(&self) -> &C {
+        &self.controller
+    }
+}
+
+impl<C, D, I> PciFunctionConfigAccessor for PciFunctionWithInterrupts<C, D, I>
+where
+    C: PciInterruptController,
+    D: PciFunctionConfigAccessor,
+    I: PciInterruptHandler<C>,
+{
+    fn config(&self) -> &PciConfigurationSpace {
+        self.device.config()
+    }
+
+    fn config_mut(&mut self) -> &mut PciConfigurationSpace {
+        self.device.config_mut()
+    }
+}
+
+impl<C, D, I> PciFunctionWithInterrupts<C, D, I>
+where
+    C: PciInterruptController,
+    D: PciDeviceHandler,
+    I: PciInterruptHandler<C>,
+{
+    pub fn active_interrupt(&self) -> PciInterruptType {
+        self.interrupt.active_interrupt(self.device.config())
+    }
+
+    pub fn signal_interrupt(&mut self, interrupt: PciInterrupt) -> Result<()> {
+        if self.interrupt.is_enabled(self.device.config()) {
+            self.interrupt
+                .signal(self.device.config_mut(), &mut self.controller, interrupt)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl<C, D, I> PciFunction for PciFunctionWithInterrupts<C, D, I>
+where
+    C: PciInterruptController,
+    D: PciDeviceHandler,
+    I: PciInterruptHandler<C>,
 {
     fn read_config(&mut self, offset: usize, data: &mut [u8]) -> Result<()> {
-        PciInterruptConfigHandler::read_config(self, offset, data)
+        self.device.preprocess_read_config(offset, data.len());
+        self.device.config_mut().read_checked(offset, data)
     }
 
     fn write_config(&mut self, offset: usize, data: &[u8]) -> Result<()> {
-        PciInterruptConfigHandler::write_config(self, offset, data)
+        self.device.config_mut().write_checked(offset, data)?;
+        self.device.postprocess_write_config(offset, data.len())?;
+        if let PciHandlerResult::Handled(Some(event)) = self.interrupt.on_write_config(
+            self.device.config_mut(),
+            &mut self.controller,
+            offset,
+            data.len(),
+        )? {
+            self.device.on_interrupt_config_update(event);
+        }
+        Ok(())
     }
 
-    fn get_bar(&self, index: PciBarIndex) -> Option<crate::bar::PciBar> {
-        self.config().get_bar(index)
-    }
-
-    fn write_bar(&mut self, bar: PciBarIndex, offset: u64, data: &[u8]) -> Result<()> {
-        PciInterruptConfigHandler::write_bar(self, bar, offset, data)
+    fn get_bar(&self, index: PciBarIndex) -> Option<PciBar> {
+        self.device.config().get_bar(index)
     }
 
     fn read_bar(&mut self, bar: PciBarIndex, offset: u64, data: &mut [u8]) -> Result<()> {
-        PciInterruptConfigHandler::read_bar(self, bar, offset, data)
+        if self
+            .interrupt
+            .read_bar(
+                self.device.config_mut(),
+                &mut self.controller,
+                bar,
+                offset,
+                data,
+            )?
+            .handled()
+        {
+            return Ok(());
+        }
+        let active = self.interrupt.active_interrupt(self.device.config());
+        let controller = &mut self.controller;
+        let interrupt = &mut self.interrupt;
+        let mut signal_fn = |config: &mut PciConfigurationSpace, irq: PciInterrupt| {
+            if interrupt.is_enabled(config) {
+                interrupt.signal(config, controller, irq)
+            } else {
+                Ok(())
+            }
+        };
+        let mut irq = PciInterruptAccess::new(active, &mut signal_fn);
+        self.device.read_bar(bar, offset, data, &mut irq)
+    }
+
+    fn write_bar(&mut self, bar: PciBarIndex, offset: u64, data: &[u8]) -> Result<()> {
+        if let PciHandlerResult::Handled(event) = self.interrupt.write_bar(
+            self.device.config_mut(),
+            &mut self.controller,
+            bar,
+            offset,
+            data,
+        )? {
+            if let Some(event) = event {
+                self.device.on_interrupt_config_update(event);
+            }
+            return Ok(());
+        }
+        let active = self.interrupt.active_interrupt(self.device.config());
+        let controller = &mut self.controller;
+        let interrupt = &mut self.interrupt;
+        let mut signal_fn = |config: &mut PciConfigurationSpace, irq: PciInterrupt| {
+            if interrupt.is_enabled(config) {
+                interrupt.signal(config, controller, irq)
+            } else {
+                Ok(())
+            }
+        };
+        let mut irq = PciInterruptAccess::new(active, &mut signal_fn);
+        self.device.write_bar(bar, offset, data, &mut irq)
     }
 }
 
 #[derive(Default)]
-pub struct PciFunctionConfig {
+pub struct PciFunctionBuilder {
     pub config: PciConfigurationSpace,
     pub multifunction: bool,
 }
 
-impl PciFunctionConfig {
+impl PciFunctionBuilder {
     pub fn new() -> Self {
         Self::default()
     }
