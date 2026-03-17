@@ -490,7 +490,7 @@ where
     type Context<'a> = T;
     type R = Option<PciConfigurationUpdate>;
 
-    fn postprocess_write_config(
+    fn on_write_config(
         &mut self,
         config: &mut PciConfigurationSpace,
         offset: usize,
@@ -551,7 +551,7 @@ where
         Ok(PciHandlerResult::Handled(None))
     }
 
-    fn preprocess_read_config(
+    fn prepare_read_config(
         &mut self,
         config: &mut PciConfigurationSpace,
         offset: usize,
@@ -1161,7 +1161,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_preprocess_read_config() {
+    fn test_prepare_read_config() {
         let c = PciMsiCapability::new(
             MsiAddressWidth::Address32Bit,
             MsiMultipleMessage::ThirtyTwo,
@@ -1172,11 +1172,11 @@ pub(crate) mod tests {
 
         // Test out of bounds.
         assert_eq!(
-            cap.preprocess_read_config(&mut config, cap.offset - 1, 1, &mut ic),
+            cap.prepare_read_config(&mut config, cap.offset - 1, 1, &mut ic),
             Ok(PciHandlerResult::Unhandled)
         );
         assert_eq!(
-            cap.preprocess_read_config(
+            cap.prepare_read_config(
                 &mut config,
                 cap.offset + cap_size(c.to_message_control()),
                 1,
@@ -1187,11 +1187,11 @@ pub(crate) mod tests {
 
         // Test within bounds.
         assert_eq!(
-            cap.preprocess_read_config(&mut config, cap.offset, 1, &mut ic),
+            cap.prepare_read_config(&mut config, cap.offset, 1, &mut ic),
             Ok(PciHandlerResult::Handled(None))
         );
         assert_eq!(
-            cap.preprocess_read_config(
+            cap.prepare_read_config(
                 &mut config,
                 cap.offset + cap_size(c.to_message_control()) - 1,
                 1,
@@ -1202,7 +1202,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_postprocess_write_config_bounds() {
+    fn test_on_write_config_bounds() {
         let c = PciMsiCapability::new(
             MsiAddressWidth::Address32Bit,
             MsiMultipleMessage::ThirtyTwo,
@@ -1213,11 +1213,11 @@ pub(crate) mod tests {
 
         // Test out of bounds.
         assert_eq!(
-            cap.postprocess_write_config(&mut config, cap.offset - 1, 1, &mut ic),
+            cap.on_write_config(&mut config, cap.offset - 1, 1, &mut ic),
             Ok(PciHandlerResult::Unhandled)
         );
         assert_eq!(
-            cap.postprocess_write_config(
+            cap.on_write_config(
                 &mut config,
                 cap.offset + cap_size(c.to_message_control()),
                 1,
@@ -1228,7 +1228,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_postprocess_write_config_control_ro_bits() {
+    fn test_on_write_config_control_ro_bits() {
         let c = PciMsiCapability::new(
             MsiAddressWidth::Address32Bit,
             MsiMultipleMessage::ThirtyTwo,
@@ -1243,7 +1243,7 @@ pub(crate) mod tests {
             !(MESSAGE_CONTROL_MSI_EN | MESSAGE_CONTROL_MULTIPLE_MSG_EN),
         );
         assert_eq!(
-            cap.postprocess_write_config(&mut config, cap.offset, 2, &mut ic),
+            cap.on_write_config(&mut config, cap.offset, 2, &mut ic),
             Ok(PciHandlerResult::Handled(None))
         );
         assert_eq!(config.read_word(cap.offset), c.to_message_control());
@@ -1264,7 +1264,7 @@ pub(crate) mod tests {
             config.write_word(cap.offset, expect);
 
             assert_eq!(
-                cap.postprocess_write_config(config, cap.offset, 2, ic),
+                cap.on_write_config(config, cap.offset, 2, ic),
                 Ok(PciHandlerResult::Handled(None))
             );
             assert_eq!(config.read_word(cap.offset), expect, "vectors: {vectors}");
@@ -1276,7 +1276,7 @@ pub(crate) mod tests {
             control | ((capable_vectors as u16 + 1) << MESSAGE_CONTROL_MULTIPLE_MSG_EN_SHIFT),
         );
         assert_eq!(
-            cap.postprocess_write_config(config, cap.offset, 2, ic),
+            cap.on_write_config(config, cap.offset, 2, ic),
             Ok(PciHandlerResult::Handled(None))
         );
 
@@ -1288,7 +1288,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_postprocess_write_config_multiple_message() {
+    fn test_on_write_config_multiple_message() {
         let c = PciMsiCapability::new(
             MsiAddressWidth::Address64Bit,
             MsiMultipleMessage::One,
@@ -1329,7 +1329,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_postprocess_write_config_enable() {
+    fn test_on_write_config_enable() {
         let c = PciMsiCapability::new(
             MsiAddressWidth::Address64Bit,
             MsiMultipleMessage::Eight,
@@ -1350,7 +1350,7 @@ pub(crate) mod tests {
         let control = config.read_word(cap.offset);
         config.write_word(cap.offset, control | MESSAGE_CONTROL_MSI_EN);
         assert_eq!(
-            cap.postprocess_write_config(&mut config, cap.offset, 2, &mut ic),
+            cap.on_write_config(&mut config, cap.offset, 2, &mut ic),
             Ok(PciHandlerResult::Handled(None))
         );
 
@@ -1359,7 +1359,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_postprocess_write_config_msi_fields_32bit() {
+    fn test_on_write_config_msi_fields_32bit() {
         let c = PciMsiCapability::new(
             MsiAddressWidth::Address32Bit,
             MsiMultipleMessage::Eight,
@@ -1380,7 +1380,7 @@ pub(crate) mod tests {
 
         config.write_dword(lower_offset, TEST_ADDRESS_32);
         assert_eq!(
-            cap.postprocess_write_config(&mut config, lower_offset, 4, &mut ic),
+            cap.on_write_config(&mut config, lower_offset, 4, &mut ic),
             Ok(PciHandlerResult::Handled(Some(expected)))
         );
 
@@ -1392,13 +1392,13 @@ pub(crate) mod tests {
 
         config.write_dword(data_offset, TEST_DATA);
         assert_eq!(
-            cap.postprocess_write_config(&mut config, data_offset, 2, &mut ic),
+            cap.on_write_config(&mut config, data_offset, 2, &mut ic),
             Ok(PciHandlerResult::Handled(Some(expected)))
         );
     }
 
     #[test]
-    fn test_postprocess_write_config_msi_fields_64bit() {
+    fn test_on_write_config_msi_fields_64bit() {
         let c = PciMsiCapability::new(
             MsiAddressWidth::Address64Bit,
             MsiMultipleMessage::Eight,
@@ -1420,7 +1420,7 @@ pub(crate) mod tests {
 
         config.write_dword(lower_offset, lower);
         assert_eq!(
-            cap.postprocess_write_config(&mut config, lower_offset, 4, &mut ic),
+            cap.on_write_config(&mut config, lower_offset, 4, &mut ic),
             Ok(PciHandlerResult::Handled(Some(expected)))
         );
 
@@ -1432,7 +1432,7 @@ pub(crate) mod tests {
 
         config.write_dword(upper_offset, upper);
         assert_eq!(
-            cap.postprocess_write_config(&mut config, upper_offset, 4, &mut ic),
+            cap.on_write_config(&mut config, upper_offset, 4, &mut ic),
             Ok(PciHandlerResult::Handled(Some(expected)))
         );
 
@@ -1444,13 +1444,13 @@ pub(crate) mod tests {
 
         config.write_dword(data_offset, TEST_DATA);
         assert_eq!(
-            cap.postprocess_write_config(&mut config, data_offset, 2, &mut ic),
+            cap.on_write_config(&mut config, data_offset, 2, &mut ic),
             Ok(PciHandlerResult::Handled(Some(expected)))
         );
     }
 
     #[test]
-    fn test_postprocess_write_config_vector_masking_disabled_32bit() {
+    fn test_on_write_config_vector_masking_disabled_32bit() {
         let c = PciMsiCapability::new(
             MsiAddressWidth::Address32Bit,
             MsiMultipleMessage::Eight,
@@ -1461,14 +1461,14 @@ pub(crate) mod tests {
         let mask_offset = cap.offset + MASK_BITS_32BIT;
 
         assert_eq!(
-            cap.postprocess_write_config(&mut config, mask_offset, 4, &mut ic),
+            cap.on_write_config(&mut config, mask_offset, 4, &mut ic),
             Ok(PciHandlerResult::Unhandled)
         );
         assert_eq!(ic.messages.len(), 0);
     }
 
     #[test]
-    fn test_postprocess_write_config_vector_masking_disabled_64bit() {
+    fn test_on_write_config_vector_masking_disabled_64bit() {
         let c = PciMsiCapability::new(
             MsiAddressWidth::Address64Bit,
             MsiMultipleMessage::Eight,
@@ -1479,14 +1479,14 @@ pub(crate) mod tests {
         let mask_offset = cap.offset + MASK_BITS_64BIT;
 
         assert_eq!(
-            cap.postprocess_write_config(&mut config, mask_offset, 4, &mut ic),
+            cap.on_write_config(&mut config, mask_offset, 4, &mut ic),
             Ok(PciHandlerResult::Unhandled)
         );
         assert_eq!(ic.messages.len(), 0);
     }
 
     #[test]
-    fn test_postprocess_write_config_vector_masking() {
+    fn test_on_write_config_vector_masking() {
         let c = PciMsiCapability::new(
             MsiAddressWidth::Address64Bit,
             MsiMultipleMessage::Eight,
@@ -1519,7 +1519,7 @@ pub(crate) mod tests {
         let mask_offset =
             cap.offset + mask_bits_offset(config.read_word(cap.offset)).expect("mask offset");
         assert_eq!(
-            cap.postprocess_write_config(&mut config, mask_offset, 4, &mut ic),
+            cap.on_write_config(&mut config, mask_offset, 4, &mut ic),
             Ok(PciHandlerResult::Handled(None))
         );
         assert_eq!(ic.messages.len(), 1);
@@ -1527,7 +1527,7 @@ pub(crate) mod tests {
         // Unmask the other. Should evaluate remaining interrupt.
         set_vector_mask(&mut config, &cap, 2, false);
         assert_eq!(
-            cap.postprocess_write_config(&mut config, mask_offset, 4, &mut ic),
+            cap.on_write_config(&mut config, mask_offset, 4, &mut ic),
             Ok(PciHandlerResult::Handled(None))
         );
         assert_eq!(ic.messages.len(), 2);

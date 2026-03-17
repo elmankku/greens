@@ -129,13 +129,13 @@ pub trait PciFunctionConfigAccessor {
 /// and controller, composing them with the device.
 pub trait PciDeviceHandler: PciFunctionConfigAccessor {
     /// Called after a config space write for device-specific post-processing.
-    fn postprocess_write_config(&mut self, offset: usize, size: usize) -> Result<()> {
+    fn on_write_config(&mut self, offset: usize, size: usize) -> Result<()> {
         let _ = (offset, size);
         Ok(())
     }
 
-    /// Called before a config space read for device-specific pre-processing.
-    fn preprocess_read_config(&mut self, offset: usize, size: usize) {
+    /// Called before a config space read to allow the device to refresh live values.
+    fn prepare_read_config(&mut self, offset: usize, size: usize) {
         let _ = (offset, size);
     }
 
@@ -248,13 +248,13 @@ where
     I: PciInterruptHandler<C>,
 {
     fn read_config(&mut self, offset: usize, data: &mut [u8]) -> Result<()> {
-        self.device.preprocess_read_config(offset, data.len());
+        self.device.prepare_read_config(offset, data.len());
         self.device.config_mut().read_checked(offset, data)
     }
 
     fn write_config(&mut self, offset: usize, data: &[u8]) -> Result<()> {
         self.device.config_mut().write_checked(offset, data)?;
-        self.device.postprocess_write_config(offset, data.len())?;
+        self.device.on_write_config(offset, data.len())?;
         if let PciHandlerResult::Handled(Some(event)) = self.interrupt.on_write_config(
             self.device.config_mut(),
             &mut self.controller,

@@ -136,7 +136,7 @@ pub fn signal_intx(
     }
 }
 
-pub fn postprocess_write_config(
+pub fn on_write_config(
     config: &mut PciConfigurationSpace,
     interrupt_controller: &mut impl PciInterruptController,
     intx: &mut PciIntx,

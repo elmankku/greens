@@ -139,7 +139,7 @@ where
     type Context<'a> = T;
     type R = ();
 
-    fn postprocess_write_config(
+    fn on_write_config(
         &mut self,
         config: &mut greens_pci::configuration_space::PciConfigurationSpace,
         offset: usize,

@@ -13,7 +13,7 @@ pub trait PciConfigurationSpaceIoHandler {
     type Context<'a>;
     type R;
 
-    fn preprocess_read_config(
+    fn prepare_read_config(
         &mut self,
         config: &mut PciConfigurationSpace,
         offset: usize,
@@ -27,7 +27,7 @@ pub trait PciConfigurationSpaceIoHandler {
         Ok(PciHandlerResult::Unhandled)
     }
 
-    fn postprocess_write_config(
+    fn on_write_config(
         &mut self,
         config: &mut PciConfigurationSpace,
         offset: usize,

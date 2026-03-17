@@ -152,7 +152,7 @@ impl<C: PciInterruptController> InterruptConfigHandler<C> for PciIntx {
         offset: usize,
         size: usize,
     ) -> Result<PciHandlerResult<Option<PciConfigurationUpdate>>> {
-        intx::postprocess_write_config(config, controller, self, offset, size);
+        intx::on_write_config(config, controller, self, offset, size);
         Ok(PciHandlerResult::Handled(None))
     }
 }
@@ -182,7 +182,7 @@ impl<T: PciInterruptController> InterruptConfigHandler<T> for PciMsi<T> {
         offset: usize,
         size: usize,
     ) -> Result<PciHandlerResult<Option<PciConfigurationUpdate>>> {
-        self.postprocess_write_config(config, offset, size, controller)
+        PciConfigurationSpaceIoHandler::on_write_config(self, config, offset, size, controller)
     }
 }
 
@@ -230,11 +230,12 @@ where
         size: usize,
     ) -> Result<PciHandlerResult<Option<PciConfigurationUpdate>>> {
         let mut c: &mut dyn PciInterruptController = controller;
-        self.postprocess_write_config(config, offset, size, &mut c)
-            .map(|r| match r {
+        PciConfigurationSpaceIoHandler::on_write_config(self, config, offset, size, &mut c).map(
+            |r| match r {
                 PciHandlerResult::Handled(()) => PciHandlerResult::Handled(None),
                 PciHandlerResult::Unhandled => PciHandlerResult::Unhandled,
-            })
+            },
+        )
     }
 }
 

@@ -486,7 +486,7 @@ where
     type Context<'a> = &'a mut dyn PciInterruptController;
     type R = ();
 
-    fn postprocess_write_config(
+    fn on_write_config(
         &mut self,
         config: &mut PciConfigurationSpace,
         offset: usize,
@@ -1077,7 +1077,7 @@ mod tests {
         entry.vector_control = 0;
     }
 
-    fn postprocess_write_config(
+    fn on_write_config(
         msix: &mut PciMsiX<[MsiXEntry; 2], [PbaEntry; 1]>,
         config: &mut PciConfigurationSpace,
         controller: &mut TestIrqController,
@@ -1087,7 +1087,7 @@ mod tests {
 
         // Set function msi-x masked.
         let mut controller: &mut dyn PciInterruptController = controller;
-        msix.postprocess_write_config(config, offset, size, &mut controller)
+        msix.on_write_config(config, offset, size, &mut controller)
             .expect("process control");
     }
 
@@ -1112,14 +1112,14 @@ mod tests {
             MESSAGE_CONTROL_MSIX_EN | MESSAGE_CONTROL_FN_MASK,
         );
 
-        postprocess_write_config(&mut m, &mut config, &mut ic, (control_offset, 2));
+        on_write_config(&mut m, &mut config, &mut ic, (control_offset, 2));
         assert!(ic.messages.is_empty());
 
         // Unmask function.
         config.set_word(control_offset, MESSAGE_CONTROL_MSIX_EN);
 
         // MSI at 1 should be generated.
-        postprocess_write_config(&mut m, &mut config, &mut ic, (control_offset, 2));
+        on_write_config(&mut m, &mut config, &mut ic, (control_offset, 2));
 
         assert_eq!(ic.messages.len(), 1);
         let entry = m.msix_table.at_mut(1).expect("get msi");
@@ -1129,7 +1129,7 @@ mod tests {
 
         // Unmask at 0 and write config: MSI at 0 should be generated.
         m.msix_table.at_mut(0).unwrap().vector_control = 0;
-        postprocess_write_config(&mut m, &mut config, &mut ic, (control_offset, 2));
+        on_write_config(&mut m, &mut config, &mut ic, (control_offset, 2));
 
         assert_eq!(ic.messages.len(), 2);
         let entry = m.msix_table.at_mut(0).expect("get msi");
@@ -1138,7 +1138,7 @@ mod tests {
         assert_eq!({ entry.msg_data }, sent.data);
 
         // Write - no new MSIs should be generated.
-        postprocess_write_config(&mut m, &mut config, &mut ic, (control_offset, 2));
+        on_write_config(&mut m, &mut config, &mut ic, (control_offset, 2));
         assert_eq!(ic.messages.len(), 2);
     }
 

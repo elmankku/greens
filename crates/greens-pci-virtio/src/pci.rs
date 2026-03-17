@@ -74,13 +74,9 @@ impl<D: VirtioPciDevice<E = greens_pci::Error, Q = Queue>> PciFunctionConfigAcce
 impl<D: VirtioPciDevice<E = greens_pci::Error, Q = Queue>> PciDeviceHandler
     for VirtioDeviceHandler<D>
 {
-    fn postprocess_write_config(&mut self, offset: usize, size: usize) -> Result<()> {
-        self.notify_cfg.postprocess_write_config(
-            &mut self.config,
-            offset,
-            size,
-            &mut self.device,
-        )?;
+    fn on_write_config(&mut self, offset: usize, size: usize) -> Result<()> {
+        self.notify_cfg
+            .on_write_config(&mut self.config, offset, size, &mut self.device)?;
         Ok(())
     }
 
