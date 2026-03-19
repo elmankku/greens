@@ -196,7 +196,7 @@ impl PciConfigurationSpace {
             Some(bar) => {
                 let mut bar = *bar;
 
-                // Ensure the IO/MEM space is enabled
+                // Ensure the IO/MEM space is enabled.
                 let command = self.read_word(PCI_COMMAND);
                 let (command_mask, bar_mask) = match bar.region_type() {
                     PciBarType::Io => (PCI_COMMAND_IO_SPACE_MASK, PCI_BAR_IO_BASE_ADDRESS_MASK),
@@ -204,7 +204,7 @@ impl PciConfigurationSpace {
                 };
 
                 if command & command_mask == 0 {
-                    // space disabled
+                    // Space disabled.
                     return None;
                 }
 
@@ -212,6 +212,17 @@ impl PciConfigurationSpace {
                 let mut address = u64::from(self.read_dword(bar_offset) & bar_mask);
                 if let PciBarType::Memory64Bit(_) = bar.region_type() {
                     address |= u64::from(self.read_dword(bar_offset + 4)) << 32;
+                }
+
+                if address == 0 {
+                    // Uninitialized.
+                    return None;
+                }
+
+                let probe = !(bar.size() - 1) & bar_mask as u64;
+                if address == probe {
+                    // Size probe in progress.
+                    return None;
                 }
 
                 bar.set_address(Some(address));
@@ -289,6 +300,33 @@ impl PciConfigurationSpace {
             1 => Ok(PCI_TYPE1_NUM_BARS),
             _ => Err(Error::UnsupportedHeader { header_type }),
         }
+    }
+
+    pub fn bar_update_for_write(&self, offset: usize) -> Option<PciBar> {
+        let bar_end = PCI_BAR0 + NUM_BAR_REGS * 4;
+        if offset < PCI_BAR0 || offset >= bar_end {
+            return None;
+        }
+
+        let reg_index = (offset - PCI_BAR0) / 4;
+
+        if let Some(bar) = self.bars[reg_index] {
+            if matches!(bar.region_type(), PciBarType::Memory64Bit(_)) {
+                // Lower dword of 64-bit BAR — defer until upper dword is written
+                return None;
+            }
+            return self.get_bar(PciBarIndex::try_from(reg_index).ok()?);
+        }
+
+        // Upper dword of a 64-bit BAR
+        if reg_index > 0
+            && let Some(bar) = self.bars[reg_index - 1]
+            && matches!(bar.region_type(), PciBarType::Memory64Bit(_))
+        {
+            return self.get_bar(PciBarIndex::try_from(reg_index - 1).ok()?);
+        }
+
+        None
     }
 
     fn validate_header_support(&self, index: &PciBarIndex) -> Result<()> {
@@ -623,8 +661,8 @@ mod tests {
         );
 
         offset = PCI_CONFIGURATION_SPACE_SIZE - 1;
-        assert_eq!(config.read_checked(offset, &mut data[0..1]).is_ok(), true);
-        assert_eq!(config.write_checked(offset, &[0; 1]).is_ok(), true);
+        assert!(config.read_checked(offset, &mut data[0..1]).is_ok());
+        assert!(config.write_checked(offset, &[0; 1]).is_ok());
     }
 
     #[test]
@@ -834,8 +872,14 @@ mod tests {
         // Interface disabled.
         assert!(config.get_bar(PciBarIndex::default()).is_none());
 
-        // Interface enabled.
+        // Interface enabled, address not yet programmed.
         config.set_word(PCI_COMMAND, PCI_COMMAND_MEM_SPACE_MASK);
+        assert!(config.get_bar(PciBarIndex::default()).is_none());
+
+        // Address programmed.
+        config
+            .write_checked(PCI_BAR0, &0x1000u32.to_ne_bytes())
+            .unwrap();
         assert!(config.get_bar(PciBarIndex::default()).is_some());
     }
 
@@ -986,7 +1030,7 @@ mod tests {
         assert_eq!(config.registers[PCI_CAP_POINTER], cap_start as u8);
 
         // Add second cap; should be aligned to the next dword
-        assert!(cap.size() % 4 != 0);
+        assert!(!cap.size().is_multiple_of(4));
         let second_start = cap_start + cap.size() + 2;
         assert_eq!(config.add_capability(&another), Ok(second_start + 2));
         validate_cap(&config, &another, second_start, 0);
@@ -1043,9 +1087,7 @@ mod tests {
     #[test]
     fn test_update_capability_invalid_size() {
         let mut config = PciConfigurationSpace::new();
-        let cap = InvalidCap {
-            size: usize::max_value(),
-        };
+        let cap = InvalidCap { size: usize::MAX };
         config.registers[PCI_CAP_POINTER] = 0x40;
         config.registers[0x40] = cap.id().into();
 
@@ -1079,7 +1121,7 @@ mod tests {
     fn test_update_capability() {
         let mut config = PciConfigurationSpace::new();
         let expected = [0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA];
-        let cap = Cap1::new(Some(expected.clone()));
+        let cap = Cap1::new(Some(expected));
 
         // Add cap
         config.registers[PCI_CAP_POINTER] = 0x40;

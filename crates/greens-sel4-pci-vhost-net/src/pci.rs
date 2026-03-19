@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use greens_core::io_interface::{InterruptLine, InterruptLineOperation, IoInterface, MsiMessage};
 use greens_pci::device::PciDevice;
-use greens_pci::function::PciFunction;
+use greens_pci::function::{PciConfigurationUpdate, PciFunction};
 use greens_pci::intx::{PciInterruptLine, PciInterruptLineConfig, PciInterruptLineState};
 use greens_pci::{PciInterruptController, PciMsiMessage};
 use greens_pci_virtio::pci::VirtioPciFunction;
@@ -103,7 +103,7 @@ where
         function: usize,
         offset: usize,
         data: &[u8],
-    ) -> greens_pci::Result<()> {
+    ) -> greens_pci::Result<Option<PciConfigurationUpdate>> {
         match function {
             0 => self.function.write_config(offset, data),
             _ => Err(greens_pci::Error::InvalidFunction { function }),
@@ -114,7 +114,11 @@ where
         self.function.read_mmio(address, data)
     }
 
-    fn write_mmio(&mut self, address: u64, data: &[u8]) -> greens_pci::Result<()> {
+    fn write_mmio(
+        &mut self,
+        address: u64,
+        data: &[u8],
+    ) -> greens_pci::Result<Option<PciConfigurationUpdate>> {
         self.function.write_mmio(address, data)
     }
 
@@ -122,7 +126,11 @@ where
         self.function.read_pio(port, data)
     }
 
-    fn write_pio(&mut self, port: u16, data: &mut [u8]) -> greens_pci::Result<()> {
+    fn write_pio(
+        &mut self,
+        port: u16,
+        data: &mut [u8],
+    ) -> greens_pci::Result<Option<PciConfigurationUpdate>> {
         self.function.write_pio(port, data)
     }
 }

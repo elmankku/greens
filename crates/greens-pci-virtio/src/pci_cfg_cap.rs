@@ -107,14 +107,20 @@ impl VirtioPciCfg {
             return true;
         }
 
+        let Some(bar_addr) = bar.address() else {
+            // BAR not mapped.
+            return true;
+        };
+
         let ret = match bar.is_mem() {
-            true => function.read_mmio(read_offset as u64, &mut data[..read_length]),
+            true => function.read_mmio(bar_addr + read_offset as u64, &mut data[..read_length]),
             false => {
-                if read_offset > u32::from(u16::MAX) {
+                let abs_addr = bar_addr + read_offset as u64;
+                if abs_addr > u64::from(u16::MAX) {
                     // Driver supplied invalid offset.
                     return true;
                 }
-                function.read_pio(read_offset as u16, &mut data[..read_length])
+                function.read_pio(abs_addr as u16, &mut data[..read_length])
             }
         };
 
@@ -145,6 +151,11 @@ impl VirtioPciCfg {
 
         let (read_offset, read_length) = access_params(function);
 
+        let Some(bar_addr) = bar.address() else {
+            // BAR not mapped.
+            return true;
+        };
+
         let mut data = [0x00u8; 4];
         get_pci_cfg_data(function, &mut data);
 
@@ -155,13 +166,14 @@ impl VirtioPciCfg {
         }
 
         _ = match bar.is_mem() {
-            true => function.write_mmio(read_offset as u64, &data[..read_length]),
+            true => function.write_mmio(bar_addr + read_offset as u64, &data[..read_length]),
             false => {
-                if read_offset > u32::from(u16::MAX) {
+                let abs_addr = bar_addr + read_offset as u64;
+                if abs_addr > u64::from(u16::MAX) {
                     // Driver supplied invalid offset.
                     return true;
                 }
-                function.write_pio(read_offset as u16, &data[..read_length])
+                function.write_pio(abs_addr as u16, &data[..read_length])
             }
         };
 
@@ -225,10 +237,10 @@ mod tests {
     use crate::pci_cap::tests::{check_cap, check_cap_offs_len, check_cap_ro_fields};
     use greens_pci::bar::{PciBar, PciBarPrefetchable::NotPrefetchable, PciBarType};
     use greens_pci::configuration_space::PciConfigurationSpace;
-    use greens_pci::function::PciFunction;
+    use greens_pci::function::{PciConfigurationUpdate, PciFunction};
     use greens_pci::registers::{
-        PCI_BAR_IO_MIN_SIZE, PCI_BAR_MEM_MIN_SIZE, PCI_COMMAND, PCI_COMMAND_IO_SPACE_MASK,
-        PCI_COMMAND_MEM_SPACE_MASK,
+        PCI_BAR_IO_MIN_SIZE, PCI_BAR_MEM_MIN_SIZE, PCI_BAR0, PCI_BAR1, PCI_COMMAND,
+        PCI_COMMAND_IO_SPACE_MASK, PCI_COMMAND_MEM_SPACE_MASK,
     };
 
     struct TestFunction {
@@ -243,10 +255,14 @@ mod tests {
             self.config.read_checked(offset, data)
         }
 
-        fn write_config(&mut self, offset: usize, data: &[u8]) -> greens_pci::Result<()> {
+        fn write_config(
+            &mut self,
+            offset: usize,
+            data: &[u8],
+        ) -> greens_pci::Result<Option<PciConfigurationUpdate>> {
             self.config.write_checked(offset, data)?;
             self.pci_cfg_cap().process_write(self, offset, data.len());
-            Ok(())
+            Ok(None)
         }
 
         fn get_bar(&self, index: PciBarIndex) -> Option<greens_pci::bar::PciBar> {
@@ -273,11 +289,11 @@ mod tests {
             bar_index: PciBarIndex,
             offset: u64,
             data: &[u8],
-        ) -> greens_pci::Result<()> {
+        ) -> greens_pci::Result<Option<PciConfigurationUpdate>> {
             if bar_index.into_inner() < 2 {
                 let offset = offset as usize;
                 self.bar[offset..offset + data.len()].copy_from_slice(data);
-                Ok(())
+                Ok(None)
             } else {
                 Err(greens_pci::Error::NotSupported)
             }
@@ -328,6 +344,11 @@ mod tests {
                 PCI_COMMAND,
                 PCI_COMMAND_MEM_SPACE_MASK | PCI_COMMAND_IO_SPACE_MASK,
             );
+
+            // Program valid BAR addresses so get_bar() returns Some.
+            // BAR 0: 32-bit MMIO at 0x1000; BAR 1: I/O at port 0x0100 (bit 0 = I/O indicator).
+            config.write_dword(PCI_BAR0, 0x0000_1000);
+            config.write_dword(PCI_BAR1, 0x0000_0101);
 
             let mut bar = [0x00u8; 20];
             bar[8..16].copy_from_slice(&0x11223344_55667788u64.to_ne_bytes());

@@ -3,12 +3,10 @@ use std::marker::PhantomData;
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 Markku Ahvenjärvi
 use greens_pci::Result;
-use greens_pci::bar::PciBarIndex;
+use greens_pci::bar::{PciBar, PciBarIndex};
 use greens_pci::bar_region::{PciBarRegion, PciBarRegionHandler, PciBarRegionInfo};
 use greens_pci::capability::{PciCapOffset, PciCapability, PciCapabilityId};
-use greens_pci::config_handler::PciConfigurationSpaceIoHandler;
-use greens_pci::function::PciHandlerResult;
-use greens_pci::registers::PCI_BAR0;
+use greens_pci::configuration_space::PciConfigurationSpace;
 use greens_pci::utils::register_block::set_dword;
 
 use crate::pci_cap::{VIRTIO_CAP_SIZE, VirtioPciCap, VirtioPciCapType, virtio_cap_len};
@@ -132,35 +130,6 @@ where
     }
 }
 
-impl<T> PciConfigurationSpaceIoHandler for VirtioPciNotifyCfg<T>
-where
-    T: VirtioPciNotify,
-{
-    type Context<'a> = T;
-    type R = ();
-
-    fn on_write_config(
-        &mut self,
-        config: &mut greens_pci::configuration_space::PciConfigurationSpace,
-        offset: usize,
-        size: usize,
-        context: &mut Self::Context<'_>,
-    ) -> Result<PciHandlerResult<Self::R>> {
-        if self.targets_bar_cfg(offset, size) {
-            let Some(bar_gpa) = config.get_bar(self.info.bar).and_then(|bar| bar.address()) else {
-                return Ok(PciHandlerResult::Unhandled);
-            };
-
-            context.set_notification_info(VirtioPciNotifyCfgInfo {
-                bar_gpa: bar_gpa + self.info.offset,
-                bar_len: self.info.length,
-                queue_notify_off: config.read_dword(self.cap_offset + REG_NOTIFY_OFF_MULTIPLIER),
-            });
-        }
-        Ok(PciHandlerResult::Handled(()))
-    }
-}
-
 impl<T> VirtioPciNotifyCfg<T>
 where
     T: VirtioPciNotify,
@@ -173,10 +142,32 @@ where
         }
     }
 
-    pub fn targets_bar_cfg(&self, offset: usize, size: usize) -> bool {
-        let bar_offset = PCI_BAR0 + (self.info.bar.into_inner() * 4);
+    pub fn on_bar_changed(
+        &mut self,
+        config: &PciConfigurationSpace,
+        bar: &PciBar,
+        context: &mut T,
+    ) {
+        if bar.index() != self.info.bar {
+            return;
+        }
+        if let Some(bar_gpa) = bar.address() {
+            self.set_notification_info(config, bar_gpa, context);
+        }
+    }
 
-        bar_offset >= offset && bar_offset < offset + size
+    pub fn on_space_changed(&mut self, config: &PciConfigurationSpace, context: &mut T) {
+        if let Some(bar_gpa) = config.get_bar(self.info.bar).and_then(|b| b.address()) {
+            self.set_notification_info(config, bar_gpa, context);
+        }
+    }
+
+    fn set_notification_info(&self, config: &PciConfigurationSpace, bar_gpa: u64, context: &mut T) {
+        context.set_notification_info(VirtioPciNotifyCfgInfo {
+            bar_gpa: bar_gpa + self.info.offset,
+            bar_len: self.info.length,
+            queue_notify_off: config.read_dword(self.cap_offset + REG_NOTIFY_OFF_MULTIPLIER),
+        });
     }
 }
 

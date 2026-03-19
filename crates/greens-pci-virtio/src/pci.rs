@@ -2,7 +2,6 @@
 // Copyright (c) 2025 Markku Ahvenjärvi
 use greens_pci::bar::{PciBar, PciBarIndex, PciBarPrefetchable::NotPrefetchable, PciBarType};
 use greens_pci::bar_region::{PciBarRegionHandler, PciBarRegionInfo};
-use greens_pci::config_handler::PciConfigurationSpaceIoHandler;
 use greens_pci::configuration_space::PciConfigurationSpace;
 use greens_pci::function::{
     PciConfigurationUpdate, PciDeviceHandler, PciFunctionBuilder, PciFunctionConfigAccessor,
@@ -74,12 +73,6 @@ impl<D: VirtioPciDevice<E = greens_pci::Error, Q = Queue>> PciFunctionConfigAcce
 impl<D: VirtioPciDevice<E = greens_pci::Error, Q = Queue>> PciDeviceHandler
     for VirtioDeviceHandler<D>
 {
-    fn on_write_config(&mut self, offset: usize, size: usize) -> Result<()> {
-        self.notify_cfg
-            .on_write_config(&mut self.config, offset, size, &mut self.device)?;
-        Ok(())
-    }
-
     fn read_bar(
         &mut self,
         bar: PciBarIndex,
@@ -171,9 +164,20 @@ impl<D: VirtioPciDevice<E = greens_pci::Error, Q = Queue>> PciDeviceHandler
         Ok(())
     }
 
-    fn on_interrupt_config_update(&mut self, event: PciConfigurationUpdate) {
-        if let PciConfigurationUpdate::MsiXMessage(vector, msg) = event {
-            self.device.set_msi_message(vector as u16, msg)
+    fn on_config_update(&mut self, event: PciConfigurationUpdate) {
+        match event {
+            PciConfigurationUpdate::MsiXMessage(vector, msg) => {
+                self.device.set_msi_message(vector as u16, msg)
+            }
+            PciConfigurationUpdate::Bar(bar) => {
+                self.notify_cfg
+                    .on_bar_changed(&self.config, &bar, &mut self.device);
+            }
+            PciConfigurationUpdate::SpaceChanged => {
+                self.notify_cfg
+                    .on_space_changed(&self.config, &mut self.device);
+            }
+            _ => {}
         }
     }
 }
@@ -292,10 +296,14 @@ where
         self.inner.read_config(offset, data)
     }
 
-    fn write_config(&mut self, offset: usize, data: &[u8]) -> Result<()> {
-        self.inner.write_config(offset, data)?;
+    fn write_config(
+        &mut self,
+        offset: usize,
+        data: &[u8],
+    ) -> Result<Option<PciConfigurationUpdate>> {
+        let update = self.inner.write_config(offset, data)?;
         self.pci_cfg_cap().process_write(self, offset, data.len());
-        Ok(())
+        Ok(update)
     }
 
     fn get_bar(&self, index: PciBarIndex) -> Option<PciBar> {
@@ -306,7 +314,12 @@ where
         self.inner.read_bar(bar, offset, data)
     }
 
-    fn write_bar(&mut self, bar: PciBarIndex, offset: u64, data: &[u8]) -> Result<()> {
+    fn write_bar(
+        &mut self,
+        bar: PciBarIndex,
+        offset: u64,
+        data: &[u8],
+    ) -> Result<Option<PciConfigurationUpdate>> {
         self.inner.write_bar(bar, offset, data)
     }
 }

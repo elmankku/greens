@@ -114,7 +114,7 @@ impl error::Error for Error {}
 
 pub type Result<T> = result::Result<T, Error>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PciMsiMessage {
     pub address: u64,
     pub data: u32,

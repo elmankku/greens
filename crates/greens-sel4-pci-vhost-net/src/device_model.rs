@@ -70,14 +70,15 @@ impl<I: IoInterface, B: EventFdBinder> DeviceModel<I, B> {
                             }
                             IoOperation::Write { data: input } => {
                                 match pcidev {
-                                    0 => self
-                                        .device
-                                        .write_config_le(
-                                            request.address as usize,
-                                            &input[0..request.size as usize],
-                                        )
+                                    0 => {
                                         // FIXME
-                                        .unwrap(),
+                                        self.device
+                                            .write_config_le(
+                                                request.address as usize,
+                                                &input[0..request.size as usize],
+                                            )
+                                            .unwrap();
+                                    }
                                     d => eprintln!("write to unknown pci device {d}"),
                                 }
                                 None
