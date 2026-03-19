@@ -212,7 +212,7 @@ mod tests {
 
             Self {
                 infos,
-                last_offset: u64::max_value(),
+                last_offset: u64::MAX,
             }
         }
     }

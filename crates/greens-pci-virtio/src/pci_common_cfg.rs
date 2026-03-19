@@ -668,7 +668,7 @@ pub mod tests {
         data: &[u8],
     ) {
         let (cfg, dev) = cfgdev;
-        cfg.write_bar(offset.value() as u64, &data, dev)
+        cfg.write_bar(offset.value() as u64, data, dev)
             .expect("write")
     }
 

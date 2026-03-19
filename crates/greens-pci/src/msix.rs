@@ -1123,7 +1123,7 @@ mod tests {
 
         assert_eq!(ic.messages.len(), 1);
         let entry = m.msix_table.at_mut(1).expect("get msi");
-        let sent = ic.messages.get(0).unwrap();
+        let sent = ic.messages.first().unwrap();
         assert_eq!(entry.msg_addr(), sent.address);
         assert_eq!({ entry.msg_data }, sent.data);
 
@@ -1263,7 +1263,7 @@ mod tests {
         // ... and evaluates interrupts
         assert_eq!(ic.messages.len(), 1);
         let entry = m.msix_table.at_mut(0).unwrap();
-        let sent = ic.messages.get(0).unwrap();
+        let sent = ic.messages.first().unwrap();
         assert_eq!(entry.msg_addr(), sent.address);
         assert_eq!({ entry.msg_data }, sent.data);
 

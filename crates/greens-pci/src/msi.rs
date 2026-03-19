@@ -997,11 +997,11 @@ pub(crate) mod tests {
     ) {
         for vector in 0..32 {
             assert!(
-                !cap.is_masked(&config, vector),
+                !cap.is_masked(config, vector),
                 "{vector} should be unmasked"
             );
             config.write_dword(offset, config.read_dword(offset) | 1 << vector);
-            assert!(cap.is_masked(&config, vector), "{vector} should be masked");
+            assert!(cap.is_masked(config, vector), "{vector} should be masked");
         }
     }
 
@@ -1040,7 +1040,7 @@ pub(crate) mod tests {
     ) {
         for vector in 0..32 {
             assert!(
-                !cap.is_pending(&config, vector),
+                !cap.is_pending(config, vector),
                 "{vector} should not be pending"
             );
 
@@ -1053,10 +1053,7 @@ pub(crate) mod tests {
             // Then test set pending.
             cap.set_pending_bit(config, vector, true)
                 .expect("set pending failed");
-            assert!(
-                cap.is_pending(&config, vector),
-                "{vector} should be pending"
-            );
+            assert!(cap.is_pending(config, vector), "{vector} should be pending");
             assert_eq!(
                 config.read_dword(offset),
                 1 << vector,
@@ -1067,7 +1064,7 @@ pub(crate) mod tests {
             cap.set_pending_bit(config, vector, false)
                 .expect("clear pending failed");
             assert!(
-                !cap.is_pending(&config, vector),
+                !cap.is_pending(config, vector),
                 "{vector} should not be pending"
             );
             assert_eq!(config.read_dword(offset), 0);

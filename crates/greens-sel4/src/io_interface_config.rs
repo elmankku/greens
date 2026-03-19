@@ -128,12 +128,12 @@ mod tests {
         let args = vec!["uservm=1,0x60000000,0x2000000,0xc0000000,0x80000".into()];
         let configs = parse_io_interface_configs(args).expect("parse");
         let cfg = configs.get(&1).expect("get");
-        check_cfg(&cfg, 0x60000000, 0x2000000, 0xc0000000, 0x80000);
+        check_cfg(cfg, 0x60000000, 0x2000000, 0xc0000000, 0x80000);
     }
 
     #[test]
     fn test_parse_io_interfaces_many() {
-        let args = vec![
+        let args = [
             "uservm=1,0x10000000,0x2000000,0x20000000,0x80000",
             "uservm=2,0x30000000,0x2000000,0x40000000,0x80000",
             "uservm=3,0x50000000,0x2000000,0x60000000,0x80000",
@@ -144,11 +144,11 @@ mod tests {
 
         let configs = parse_io_interface_configs(args).expect("parse");
         let cfg = configs.get(&1).expect("get");
-        check_cfg(&cfg, 0x10000000, 0x2000000, 0x20000000, 0x80000);
+        check_cfg(cfg, 0x10000000, 0x2000000, 0x20000000, 0x80000);
         let cfg = configs.get(&2).expect("get");
-        check_cfg(&cfg, 0x30000000, 0x2000000, 0x40000000, 0x80000);
+        check_cfg(cfg, 0x30000000, 0x2000000, 0x40000000, 0x80000);
         let cfg = configs.get(&3).expect("get");
-        check_cfg(&cfg, 0x50000000, 0x2000000, 0x60000000, 0x80000);
+        check_cfg(cfg, 0x50000000, 0x2000000, 0x60000000, 0x80000);
     }
 
     #[test]

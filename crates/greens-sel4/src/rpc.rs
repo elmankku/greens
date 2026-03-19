@@ -203,7 +203,7 @@ pub mod tests {
     fn dequeue_ioreq_reply(rpc: &DriverRpc<Mapping, Doorbell>) -> rpcmsg_t {
         let mut vso_rpc = rpc.rpc.lock().expect("lock error");
         unsafe {
-            let ioreq = rpcmsg_receive(&mut (*vso_rpc).driver_rpc.response as *mut _);
+            let ioreq = rpcmsg_receive(&mut vso_rpc.driver_rpc.response as *mut _);
             assert!(!ioreq.is_null());
             *ioreq.to_owned()
         }
